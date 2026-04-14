@@ -3,6 +3,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/firebase/server";
 import { buildSystemPrompt, type ContentFormat, type KnowledgeSource } from "@/lib/studio/prompts";
+import {
+  MAX_VARIATIONS,
+  type QdrantSource,
+  type TavilySource,
+} from "@/lib/studio/generate-shared";
 
 export const runtime = "nodejs";
 
@@ -51,9 +56,6 @@ function normalizeSlug(value: string): string {
 // Maximum length for a Qdrant project ID (matches api_inlevor constraint)
 const MAX_PROJECT_ID_LENGTH = 180;
 
-// Maximum number of content variations the user can request
-export const MAX_VARIATIONS = 3;
-
 // ─── auth ─────────────────────────────────────────────────────────────────────
 
 function getBearerToken(request: NextRequest): string {
@@ -75,20 +77,6 @@ interface GenerateRequestBody {
   variations?: number;
   orgId?: string;
   marketScope?: string;
-}
-
-export interface QdrantSource {
-  id?: string;
-  score?: number | null;
-  snippet?: string;
-  storagePath?: string;
-  sectionKind?: string;
-}
-
-export interface TavilySource {
-  title?: string;
-  url?: string;
-  snippet?: string;
 }
 
 // ─── Qdrant retrieval ─────────────────────────────────────────────────────────

@@ -11,12 +11,13 @@ import {
   type ContentFormat,
   type KnowledgeSource,
 } from "@/lib/studio/prompts";
-import type { QdrantSource, TavilySource } from "@/app/api/studio/ai/generate/route";
+import {
+  MAX_VARIATIONS,
+  type QdrantSource,
+  type TavilySource,
+} from "@/lib/studio/generate-shared";
 
 // ─── constants ────────────────────────────────────────────────────────────────
-
-// Mirrors MAX_VARIATIONS in the API route — update both if changing
-const MAX_VARIATIONS = 3;
 
 const SOURCES: { id: KnowledgeSource; label: string; emoji: string; description: string }[] = [
   {
