@@ -9,11 +9,10 @@ export default function StudioLanding() {
         <StudioNav />
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold text-highlight-light dark:text-highlight-dark">
-            Criar
+            Studio
           </h1>
           <p className="text-secondary-dark dark:text-secondary-light">
-            Gere conteúdos (blog, Instagram, newsletter) e imagens a partir da
-            Biblioteca.
+            Gere conteúdos de alta qualidade com IA — blog, Instagram, newsletter e muito mais.
           </p>
           <p className="text-xs text-secondary-dark/80 dark:text-secondary-light/80">
             Se a Biblioteca ainda estiver vazia, comece por Mercado (KB) para
@@ -21,10 +20,18 @@ export default function StudioLanding() {
           </p>
         </div>
 
+        {/* Featured: Criar com IA */}
+        <StudioCard
+          title="✦ Criar com IA"
+          description="Interface tipo Gemini: escreva o que quer criar, escolha a fonte (Qdrant / Internet / Combinado) e o formato (Blog, Instagram, Carrossel, Newsletter, SEO e mais). A IA gera em tempo real."
+          href="/dashboard/studio/create"
+          featured
+        />
+
         <div className="grid gap-4 md:grid-cols-2">
           <StudioCard
             title="Conteúdos"
-            description="Crie peças e variações por canal. Use isso como “fila de produção” antes do calendário."
+            description="Crie peças e variações por canal. Use isso como fila de produção antes do calendário."
             href="/dashboard/studio/briefs"
           />
           <StudioCard
@@ -57,13 +64,18 @@ type CardProps = {
   title: string;
   description: string;
   href: string;
+  featured?: boolean;
 };
 
-function StudioCard({ title, description, href }: CardProps) {
+function StudioCard({ title, description, href, featured }: CardProps) {
   return (
     <Link
       href={href}
-      className="block rounded border border-secondary-dark/30 dark:border-secondary-light/20 bg-secondary-light/10 dark:bg-secondary-dark/30 p-4 hover:scale-[0.99] transition"
+      className={`block rounded border p-4 hover:scale-[0.99] transition ${
+        featured
+          ? "border-highlight-light dark:border-highlight-dark bg-secondary-light/15 dark:bg-secondary-dark/40 md:col-span-2"
+          : "border-secondary-dark/30 dark:border-secondary-light/20 bg-secondary-light/10 dark:bg-secondary-dark/30"
+      }`}
     >
       <h2 className="text-lg font-semibold text-highlight-light dark:text-highlight-dark mb-1">
         {title}

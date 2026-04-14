@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const primaryLinks = [
-  { href: "/dashboard/studio", label: "Criar" },
+  { href: "/dashboard/studio/create", label: "✦ Criar com IA" },
+  { href: "/dashboard/studio", label: "Início" },
   { href: "/dashboard/studio/library", label: "Biblioteca" },
   { href: "/dashboard/studio/agenda", label: "Calendário" },
   { href: "/dashboard/studio/briefs", label: "Conteúdos" },
@@ -63,7 +64,7 @@ export default function StudioNav() {
         </details>
 
         <div className="text-xs text-secondary-dark/60 dark:text-secondary-light/60">
-          Dica: Biblioteca é onde você sobe materiais e testa busca. Criar é para gerar peças.
+          Dica: use &ldquo;Criar com IA&rdquo; para gerar conteúdo. Biblioteca é onde você sobe PDFs para o Qdrant.
         </div>
       </div>
     </nav>
