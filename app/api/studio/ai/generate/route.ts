@@ -21,13 +21,38 @@ function getRetrieveApiUrl(): string {
 
 function getOpenAiKey(): string {
   const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error("OPENAI_API_KEY nao configurada.");
+  if (!key) throw new Error("OPENAI_API_KEY não configurada.");
   return key;
 }
 
 function getTavilyKey(): string | null {
   return process.env.TAVILY_API_KEY || null;
 }
+
+/** Safely normalize an org/scope slug — cap length first to avoid ReDoS. */
+function normalizeSlug(value: string): string {
+  const capped = value.trim().slice(0, 200).toLowerCase();
+  let result = "";
+  let prevDash = true; // treat start as dash to skip leading dashes
+  for (let i = 0; i < capped.length; i++) {
+    const ch = capped[i];
+    if (/[a-z0-9]/.test(ch)) {
+      result += ch;
+      prevDash = false;
+    } else if (!prevDash) {
+      result += "-";
+      prevDash = true;
+    }
+  }
+  // strip trailing dash
+  return result.endsWith("-") ? result.slice(0, -1) : result;
+}
+
+// Maximum length for a Qdrant project ID (matches api_inlevor constraint)
+const MAX_PROJECT_ID_LENGTH = 180;
+
+// Maximum number of content variations the user can request
+export const MAX_VARIATIONS = 3;
 
 // ─── auth ─────────────────────────────────────────────────────────────────────
 
@@ -73,7 +98,7 @@ async function fetchQdrantContext(
   orgId: string,
   marketScope: string
 ): Promise<{ context: string; sources: QdrantSource[] }> {
-  const marketProjectId = `market__${orgId}__${marketScope}`.slice(0, 180);
+  const marketProjectId = `market__${orgId}__${marketScope}`.slice(0, MAX_PROJECT_ID_LENGTH);
 
   const response = await fetch(getRetrieveApiUrl(), {
     method: "POST",
@@ -298,17 +323,9 @@ export async function POST(request: NextRequest) {
   const audience = String(body.audience ?? "investidor").trim() || "investidor";
   const language = String(body.language ?? "pt-BR").trim();
   const includeSources = body.includeSources !== false;
-  const variations = Math.min(Math.max(Number(body.variations ?? 1), 1), 3);
-  const orgId = String(body.orgId ?? "inlevor")
-    .trim()
-    .toLowerCase()
-    .replace(/[^\w-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "") || "inlevor";
-  const marketScope = String(body.marketScope ?? "br")
-    .trim()
-    .toLowerCase()
-    .replace(/[^\w-]+/g, "-") || "br";
+  const variations = Math.min(Math.max(Number(body.variations ?? 1), 1), MAX_VARIATIONS);
+  const orgId = normalizeSlug(String(body.orgId ?? "inlevor")) || "inlevor";
+  const marketScope = normalizeSlug(String(body.marketScope ?? "br")) || "br";
 
   // 3. SSE stream
   const encoder = new TextEncoder();

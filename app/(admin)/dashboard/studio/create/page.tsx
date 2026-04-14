@@ -15,6 +15,9 @@ import type { QdrantSource, TavilySource } from "@/app/api/studio/ai/generate/ro
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
+// Mirrors MAX_VARIATIONS in the API route — update both if changing
+const MAX_VARIATIONS = 3;
+
 const SOURCES: { id: KnowledgeSource; label: string; emoji: string; description: string }[] = [
   {
     id: "qdrant",
@@ -398,11 +401,11 @@ export default function StudioCreatePage() {
               <input
                 type="number"
                 min={1}
-                max={3}
+                max={MAX_VARIATIONS}
                 value={variations}
                 onChange={(e) =>
                   setVariations(
-                    Math.min(3, Math.max(1, Number(e.target.value) || 1))
+                    Math.min(MAX_VARIATIONS, Math.max(1, Number(e.target.value) || 1))
                   )
                 }
                 className="w-full rounded border border-secondary-dark/30 dark:border-secondary-light/30 bg-transparent px-3 py-2 text-sm"
