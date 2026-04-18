@@ -1,20 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/firebase/server";
+import { buildKbCoreHeaders, getKbCoreUrl } from "@/lib/studio/kb-core";
 
 export const runtime = "nodejs";
 
-const DEFAULT_RETRIEVE_API_URL = "https://api.inlevor.com.br/ai/retrieve";
-
-function getRetrieveApiUrl() {
-  const configured =
-    process.env.KB_RETRIEVE_API_URL ||
-    process.env.API_INLEVOR_BASE_URL ||
-    DEFAULT_RETRIEVE_API_URL;
-  const normalized = String(configured || "").replace(/\/+$/, "");
-  return normalized.endsWith("/ai/retrieve")
-    ? normalized
-    : `${normalized}/ai/retrieve`;
-}
+const MARKET_SCOPE_ID = "market__br";
 
 const normalizeId = (value: unknown) =>
   String(value || "")
@@ -33,8 +23,10 @@ const getBearerToken = (request: NextRequest) => {
 type Payload = {
   query?: string;
   orgId?: string;
-  marketScope?: string;
   sourceId?: string;
+  state?: string;
+  city?: string;
+  neighborhood?: string;
   limit?: number;
   scoreThreshold?: number;
 };
@@ -67,49 +59,48 @@ export async function POST(request: NextRequest) {
     }
 
     const orgId = normalizeId(body?.orgId || "inlevor") || "inlevor";
-    const marketScope = normalizeId(body?.marketScope || "br") || "br";
-    const marketProjectId = `market__${orgId}__${marketScope}`.slice(0, 180);
     const sourceId = String(body?.sourceId || "").trim();
+    const state = normalizeId(body?.state);
+    const city = normalizeId(body?.city);
+    const neighborhood = normalizeId(body?.neighborhood);
     const limit = Math.min(Math.max(Number(body?.limit || 5), 1), 20);
     const scoreThreshold = Number.isFinite(Number(body?.scoreThreshold))
       ? Number(body?.scoreThreshold)
       : undefined;
 
-    const upstreamResponse = await fetch(getRetrieveApiUrl(), {
+    const upstreamResponse = await fetch(getKbCoreUrl("/kb/retrieve"), {
       method: "POST",
-      headers: {
+      headers: buildKbCoreHeaders({
         "Content-Type": "application/json",
         Accept: "application/json",
-      },
+      }),
       body: JSON.stringify({
         query,
         limit,
         scoreThreshold,
-        sourceProject: "inlevor",
-        projectId: marketProjectId,
         kbDomain: "market",
         orgId,
-        marketScope,
-        ...(sourceId ? { sourceId } : {}),
+        scopeId: MARKET_SCOPE_ID,
+        filters: {
+          ...(sourceId ? { sourceId } : {}),
+          ...(state ? { state } : {}),
+          ...(city ? { city } : {}),
+          ...(neighborhood ? { neighborhood } : {}),
+        },
       }),
       cache: "no-store",
     });
 
     const rawText = await upstreamResponse.text();
-    let upstreamPayload: unknown = null;
-    try {
-      upstreamPayload = rawText ? JSON.parse(rawText) : null;
-    } catch {
-      upstreamPayload = null;
-    }
+    const upstreamPayload = rawText ? JSON.parse(rawText) : null;
 
     if (!upstreamResponse.ok) {
       const message =
         (upstreamPayload &&
           typeof upstreamPayload === "object" &&
           "error" in upstreamPayload &&
-          typeof (upstreamPayload as any).error === "string" &&
-          (upstreamPayload as any).error) ||
+          typeof (upstreamPayload as { error?: unknown }).error === "string" &&
+          (upstreamPayload as { error: string }).error) ||
         `Falha ao consultar busca (${upstreamResponse.status}).`;
 
       return NextResponse.json(
@@ -121,8 +112,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       orgId,
-      marketScope,
-      marketProjectId,
+      scopeId: MARKET_SCOPE_ID,
+      state: state || null,
+      city: city || null,
+      neighborhood: neighborhood || null,
       upstream: upstreamPayload,
     });
   } catch (error) {
@@ -133,4 +126,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

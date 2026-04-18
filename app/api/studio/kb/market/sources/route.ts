@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, portalDb } from "@/firebase/server";
+import { auth } from "@/firebase/server";
+import { buildKbCoreHeaders, getKbCoreUrl } from "@/lib/studio/kb-core";
 
 export const runtime = "nodejs";
+
+const MARKET_SCOPE_ID = "market__br";
 
 const normalizeId = (value: unknown) =>
   String(value || "")
@@ -37,39 +40,54 @@ export async function GET(request: NextRequest) {
 
     const url = new URL(request.url);
     const orgId = normalizeId(url.searchParams.get("orgId") || "inlevor") || "inlevor";
-    const marketScope = normalizeId(url.searchParams.get("marketScope") || "br") || "br";
-    const marketProjectId = `market__${orgId}__${marketScope}`.slice(0, 180);
+    const state = normalizeId(url.searchParams.get("state"));
+    const city = normalizeId(url.searchParams.get("city"));
+    const neighborhood = normalizeId(url.searchParams.get("neighborhood"));
 
-    const snap = await portalDb
-      .collection("kb_projects")
-      .doc(marketProjectId)
-      .collection("sources")
-      .get();
+    const params = new URLSearchParams({
+      orgId,
+      sourceProject: "blog-app",
+      kbDomain: "market",
+      scopeId: MARKET_SCOPE_ID,
+      limit: "100",
+    });
+    if (state) params.set("state", state);
+    if (city) params.set("city", city);
+    if (neighborhood) params.set("neighborhood", neighborhood);
 
-    const sources = snap.docs
-      .map((doc) => ({ id: doc.id, ...(doc.data() || {}) }))
-      .sort((a, b) => {
-        const aMs = Number((a as any).updatedAt?.toMillis?.() || 0);
-        const bMs = Number((b as any).updatedAt?.toMillis?.() || 0);
-        return bMs - aMs;
-      })
-      .map((source) => ({
-        id: String((source as any).id || ""),
-        label: String((source as any).label || ""),
-        type: String((source as any).type || ""),
-        documentType: String((source as any).documentType || ""),
-        storagePath: String((source as any).storagePath || ""),
-        preparationStatus: String((source as any).preparationStatus || "not_started"),
-        indexationStatus: String((source as any).indexationStatus || "not_started"),
-        updatedAt: (source as any).updatedAt || null,
-      }));
+    const upstreamResponse = await fetch(
+      `${getKbCoreUrl("/kb/sources")}?${params.toString()}`,
+      {
+        method: "GET",
+        headers: buildKbCoreHeaders({ Accept: "application/json" }),
+        cache: "no-store",
+      },
+    );
+
+    const raw = await upstreamResponse.text();
+    const upstreamPayload = raw ? JSON.parse(raw) : {};
+
+    if (!upstreamResponse.ok || !upstreamPayload?.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            upstreamPayload?.error || "Falha ao carregar fontes do KB Core.",
+        },
+        { status: upstreamResponse.status === 400 ? 400 : 502 },
+      );
+    }
 
     return NextResponse.json({
       success: true,
       orgId,
-      marketScope,
-      marketProjectId,
-      sources,
+      scopeId: MARKET_SCOPE_ID,
+      state: state || null,
+      city: city || null,
+      neighborhood: neighborhood || null,
+      sources: Array.isArray(upstreamPayload?.sources)
+        ? upstreamPayload.sources
+        : [],
     });
   } catch (error) {
     console.error("[studio/kb/market/sources] error:", error);
@@ -79,4 +97,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

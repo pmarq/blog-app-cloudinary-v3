@@ -6,6 +6,8 @@ export type QdrantSource = {
   snippet?: string;
   storagePath?: string;
   sectionKind?: string;
+  kbDomain?: string;
+  documentType?: string;
 };
 
 export type TavilySource = {
@@ -13,4 +15,3 @@ export type TavilySource = {
   url?: string;
   snippet?: string;
 };
-

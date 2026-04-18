@@ -8,21 +8,11 @@ import {
   type QdrantSource,
   type TavilySource,
 } from "@/lib/studio/generate-shared";
+import { buildKbCoreHeaders, getKbCoreUrl } from "@/lib/studio/kb-core";
 
 export const runtime = "nodejs";
 
 // ─── env helpers ──────────────────────────────────────────────────────────────
-
-function getRetrieveApiUrl(): string {
-  const base =
-    process.env.KB_RETRIEVE_API_URL ||
-    process.env.API_INLEVOR_BASE_URL ||
-    "https://api.inlevor.com.br";
-  const normalized = String(base).replace(/\/+$/, "");
-  return normalized.endsWith("/ai/retrieve")
-    ? normalized
-    : `${normalized}/ai/retrieve`;
-}
 
 function getOpenAiKey(): string {
   const key = process.env.OPENAI_API_KEY;
@@ -53,9 +43,6 @@ function normalizeSlug(value: string): string {
   return result.endsWith("-") ? result.slice(0, -1) : result;
 }
 
-// Maximum length for a Qdrant project ID (matches api_inlevor constraint)
-const MAX_PROJECT_ID_LENGTH = 180;
-
 // ─── auth ─────────────────────────────────────────────────────────────────────
 
 function getBearerToken(request: NextRequest): string {
@@ -76,61 +63,88 @@ interface GenerateRequestBody {
   includeSources?: boolean;
   variations?: number;
   orgId?: string;
-  marketScope?: string;
+  state?: string;
+  city?: string;
+  neighborhood?: string;
+  linkedProjectId?: string;
 }
 
 // ─── Qdrant retrieval ─────────────────────────────────────────────────────────
 
-async function fetchQdrantContext(
-  query: string,
-  orgId: string,
-  marketScope: string
-): Promise<{ context: string; sources: QdrantSource[] }> {
-  const marketProjectId = `market__${orgId}__${marketScope}`.slice(0, MAX_PROJECT_ID_LENGTH);
+type KbRetrieveResult = {
+  id?: string;
+  score?: number | null;
+  snippet?: string;
+  text?: string;
+  payload?: Record<string, unknown>;
+};
 
-  const response = await fetch(getRetrieveApiUrl(), {
+type KbContextRequest = {
+  query: string;
+  orgId: string;
+  kbDomain: "market" | "brand" | "project";
+  scopeId: string;
+  limit: number;
+  scoreThreshold?: number;
+  filters?: {
+    state?: string;
+    city?: string;
+    neighborhood?: string;
+    linkedProjectId?: string;
+  };
+};
+
+async function fetchKbContext(
+  request: KbContextRequest,
+): Promise<{ context: string; sources: QdrantSource[] }> {
+  const response = await fetch(getKbCoreUrl("/kb/retrieve"), {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({
-      query,
-      limit: 6,
-      scoreThreshold: 0.35,
-      sourceProject: "inlevor",
-      projectId: marketProjectId,
-      kbDomain: "market",
-      orgId,
-      marketScope,
+    headers: buildKbCoreHeaders({
+      "Content-Type": "application/json",
+      Accept: "application/json",
     }),
+    body: JSON.stringify(request),
     cache: "no-store",
   });
 
   if (!response.ok) {
-    console.warn("[generate] Qdrant retrieve failed:", response.status);
+    console.warn(
+      `[generate] KB retrieve failed for ${request.kbDomain}:`,
+      response.status,
+    );
     return { context: "", sources: [] };
   }
 
-  type QdrantResult = {
-    id?: string;
-    score?: number | null;
-    payload?: Record<string, unknown>;
-  };
-
-  const payload = (await response.json()) as { results?: QdrantResult[] };
-  const results: QdrantResult[] = Array.isArray(payload?.results)
+  const payload = (await response.json()) as { results?: KbRetrieveResult[] };
+  const results: KbRetrieveResult[] = Array.isArray(payload?.results)
     ? payload.results
     : [];
 
-  const sources: QdrantSource[] = results.map((r) => ({
-    id: String(r.id ?? ""),
-    score: typeof r.score === "number" ? r.score : null,
-    snippet: String(r.payload?.snippet ?? r.payload?.text ?? "").slice(0, 400),
-    storagePath: String(r.payload?.storagePath ?? ""),
-    sectionKind: String(r.payload?.sectionKind ?? ""),
-  }));
+  const sources: QdrantSource[] = results.map((result) => {
+    const sourcePayload = result.payload || {};
+    return {
+      id: String(result.id ?? ""),
+      score: typeof result.score === "number" ? result.score : null,
+      snippet: String(
+        result.snippet ?? result.text ?? sourcePayload.snippet ?? sourcePayload.text ?? "",
+      ).slice(0, 400),
+      storagePath: String(sourcePayload.storagePath ?? ""),
+      sectionKind: String(sourcePayload.sectionKind ?? ""),
+      kbDomain: String(sourcePayload.kbDomain ?? request.kbDomain),
+      documentType: String(sourcePayload.documentType ?? ""),
+    };
+  });
+
+  const title =
+    request.kbDomain === "brand"
+      ? "Conhecimento de Marca"
+      : request.kbDomain === "project"
+        ? "Conhecimento de Projeto"
+        : "Conhecimento de Mercado";
 
   const context = sources
-    .filter((s) => s.snippet)
-    .map((s, i) => `[Conhecimento ${i + 1}]: ${s.snippet}`)
+    .filter((source) => source.snippet)
+    .map((source, index) => `[${title} ${index + 1}]: ${source.snippet}`)
     .join("\n\n");
 
   return { context, sources };
@@ -313,7 +327,10 @@ export async function POST(request: NextRequest) {
   const includeSources = body.includeSources !== false;
   const variations = Math.min(Math.max(Number(body.variations ?? 1), 1), MAX_VARIATIONS);
   const orgId = normalizeSlug(String(body.orgId ?? "inlevor")) || "inlevor";
-  const marketScope = normalizeSlug(String(body.marketScope ?? "br")) || "br";
+  const state = normalizeSlug(String(body.state ?? ""));
+  const city = normalizeSlug(String(body.city ?? ""));
+  const neighborhood = normalizeSlug(String(body.neighborhood ?? ""));
+  const linkedProjectId = normalizeSlug(String(body.linkedProjectId ?? ""));
 
   // 3. SSE stream
   const encoder = new TextEncoder();
@@ -338,13 +355,54 @@ export async function POST(request: NextRequest) {
 
         if (source === "qdrant" || source === "both") {
           send({ type: "status", message: "Consultando cérebro (Qdrant)..." });
-          const { context, sources } = await fetchQdrantContext(
-            prompt,
-            orgId,
-            marketScope
-          );
-          qdrantSources = sources;
-          if (context) combinedContext += `## Conhecimento Interno\n${context}\n\n`;
+          const [marketContext, brandContext, projectContext] = await Promise.all([
+            fetchKbContext({
+              query: prompt,
+              orgId,
+              kbDomain: "market",
+              scopeId: "market__br",
+              limit: 6,
+              scoreThreshold: 0.35,
+              filters: {
+                ...(state ? { state } : {}),
+                ...(city ? { city } : {}),
+                ...(neighborhood ? { neighborhood } : {}),
+              },
+            }),
+            fetchKbContext({
+              query: prompt,
+              orgId,
+              kbDomain: "brand",
+              scopeId: "brand__inlevor",
+              limit: 4,
+              scoreThreshold: 0.3,
+            }),
+            linkedProjectId
+              ? fetchKbContext({
+                  query: prompt,
+                  orgId,
+                  kbDomain: "project",
+                  scopeId: linkedProjectId,
+                  limit: 5,
+                  scoreThreshold: 0.3,
+                  filters: { linkedProjectId },
+                })
+              : Promise.resolve({ context: "", sources: [] }),
+          ]);
+          qdrantSources = [
+            ...brandContext.sources,
+            ...marketContext.sources,
+            ...projectContext.sources,
+          ];
+          if (brandContext.context) {
+            combinedContext += `## Conhecimento de Marca\n${brandContext.context}\n\n`;
+          }
+          if (marketContext.context) {
+            combinedContext += `## Conhecimento de Mercado\n${marketContext.context}\n\n`;
+          }
+          if (projectContext.context) {
+            combinedContext += `## Conhecimento de Projeto\n${projectContext.context}\n\n`;
+          }
         }
 
         if (source === "tavily" || source === "both") {

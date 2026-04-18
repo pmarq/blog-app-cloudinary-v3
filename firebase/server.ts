@@ -98,6 +98,7 @@ if (!apps.find((app) => app.name === "core")) {
 export const firestore: Firestore = getFirestore(blogApp);
 export const portalDb: Firestore = getFirestore(portalApp);
 export const auth: Auth = getAuth(coreApp);
+export const blogStorage: Storage = getStorage(blogApp);
 export const portalStorage: Storage = getStorage(portalApp);
 
 // Função utilitária (opcional)

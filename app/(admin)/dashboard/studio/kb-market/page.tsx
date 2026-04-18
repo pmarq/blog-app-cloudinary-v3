@@ -11,6 +11,12 @@ type MarketSource = {
   type: string;
   documentType: string;
   storagePath: string;
+  kbDomain?: string;
+  scopeId?: string;
+  state?: string | null;
+  city?: string | null;
+  neighborhood?: string | null;
+  status?: string;
   preparationStatus: string;
   indexationStatus: string;
 };
@@ -30,7 +36,9 @@ function toNumberInput(value: string) {
 
 export default function StudioKbMarketPage() {
   const [orgId, setOrgId] = useState("inlevor");
-  const [marketScope, setMarketScope] = useState("br");
+  const [state, setState] = useState("");
+  const [city, setCity] = useState("");
+  const [neighborhood, setNeighborhood] = useState("");
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState("5");
   const [scoreThreshold, setScoreThreshold] = useState("");
@@ -65,12 +73,14 @@ export default function StudioKbMarketPage() {
     setSourcesError(null);
     try {
       const token = await getToken();
-      const res = await fetch(
-        `/api/studio/kb/market/sources?orgId=${encodeURIComponent(
-          orgId,
-        )}&marketScope=${encodeURIComponent(marketScope)}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      const params = new URLSearchParams({ orgId });
+      if (state.trim()) params.set("state", state.trim());
+      if (city.trim()) params.set("city", city.trim());
+      if (neighborhood.trim()) params.set("neighborhood", neighborhood.trim());
+
+      const res = await fetch(`/api/studio/kb/market/sources?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const payload = await res.json();
       if (!res.ok || !payload?.success) {
         throw new Error(payload?.message || "Falha ao carregar fontes.");
@@ -87,7 +97,7 @@ export default function StudioKbMarketPage() {
   useEffect(() => {
     refreshSources();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId, marketScope]);
+  }, [orgId, state, city, neighborhood]);
 
   const handleUpload = async () => {
     setUploadOk(null);
@@ -103,8 +113,10 @@ export default function StudioKbMarketPage() {
       const form = new FormData();
       form.append("authToken", token);
       form.append("orgId", orgId);
-      form.append("marketScope", marketScope);
       form.append("autoIndex", "true");
+      if (state.trim()) form.append("state", state.trim());
+      if (city.trim()) form.append("city", city.trim());
+      if (neighborhood.trim()) form.append("neighborhood", neighborhood.trim());
       form.append("file", pdf);
 
       const res = await fetch("/api/studio/kb/market/add-source", {
@@ -148,8 +160,10 @@ export default function StudioKbMarketPage() {
         body: JSON.stringify({
           query,
           orgId,
-          marketScope,
           sourceId: selectedSourceId || undefined,
+          state: state.trim() || undefined,
+          city: city.trim() || undefined,
+          neighborhood: neighborhood.trim() || undefined,
           limit: toNumberInput(limit) ?? 5,
           scoreThreshold: scoreThresholdValue ?? undefined,
         }),
@@ -181,8 +195,8 @@ export default function StudioKbMarketPage() {
             KB Mercado
           </h1>
           <p className="text-secondary-dark dark:text-secondary-light">
-            Envie materiais de mercado (não por projeto) e valide a busca com
-            filtros por org e escopo.
+            Envie materiais de mercado com `scopeId = market__br` e refine a
+            busca por estado, cidade e bairro quando fizer sentido.
           </p>
         </div>
 
@@ -198,15 +212,33 @@ export default function StudioKbMarketPage() {
               />
             </div>
             <div className="space-y-1">
-              <div className="text-xs font-semibold">Escopo</div>
+              <div className="text-xs font-semibold">Estado</div>
               <input
-                value={marketScope}
-                onChange={(e) => setMarketScope(e.target.value)}
+                value={state}
+                onChange={(e) => setState(e.target.value)}
                 className="w-full px-3 py-2 border rounded text-sm bg-transparent"
-                placeholder="br"
+                placeholder="sp"
               />
             </div>
             <div className="space-y-1">
+              <div className="text-xs font-semibold">Cidade</div>
+              <input
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="w-full px-3 py-2 border rounded text-sm bg-transparent"
+                placeholder="sao-paulo"
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="text-xs font-semibold">Bairro</div>
+              <input
+                value={neighborhood}
+                onChange={(e) => setNeighborhood(e.target.value)}
+                className="w-full px-3 py-2 border rounded text-sm bg-transparent"
+                placeholder="vila-mariana"
+              />
+            </div>
+            <div className="space-y-1 md:col-span-2">
               <div className="text-xs font-semibold">Fonte (opcional)</div>
               <select
                 value={selectedSourceId}
@@ -313,6 +345,9 @@ export default function StudioKbMarketPage() {
                 const sectionKind = String(payload.sectionKind || "");
                 const score =
                   typeof r.score === "number" ? r.score.toFixed(3) : "-";
+                const geo = [payload.state, payload.city, payload.neighborhood]
+                  .filter(Boolean)
+                  .join(" / ");
                 return (
                   <div
                     key={r.id || String(idx)}
@@ -322,6 +357,9 @@ export default function StudioKbMarketPage() {
                       #{idx + 1} score {score}{" "}
                       {sectionKind ? `| ${sectionKind}` : ""}
                     </div>
+                    {geo ? (
+                      <div className="text-[11px] opacity-70 mt-1">{geo}</div>
+                    ) : null}
                     <div className="text-sm mt-1 whitespace-pre-wrap">
                       {snippet.slice(0, 500)}
                       {snippet.length > 500 ? "..." : ""}
@@ -341,4 +379,3 @@ export default function StudioKbMarketPage() {
     </AdminLayout>
   );
 }
-

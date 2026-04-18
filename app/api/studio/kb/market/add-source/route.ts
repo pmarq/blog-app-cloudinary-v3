@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, portalDb, portalStorage } from "@/firebase/server";
+import { auth, blogStorage } from "@/firebase/server";
+import { buildKbCoreHeaders, getKbCoreUrl } from "@/lib/studio/kb-core";
 
 export const runtime = "nodejs";
+
+const MARKET_SCOPE_ID = "market__br";
 
 const normalizeId = (value: unknown) =>
   String(value || "")
@@ -24,8 +27,10 @@ export async function POST(request: NextRequest) {
     const file = form.get("file");
     const authToken = String(form.get("authToken") || "").trim();
 
-    const orgIdRaw = String(form.get("orgId") || "inlevor").trim();
-    const marketScopeRaw = String(form.get("marketScope") || "br").trim();
+    const orgId = normalizeId(form.get("orgId") || "inlevor") || "inlevor";
+    const state = normalizeId(form.get("state"));
+    const city = normalizeId(form.get("city"));
+    const neighborhood = normalizeId(form.get("neighborhood"));
     const autoIndex = String(form.get("autoIndex") || "true").trim() !== "false";
 
     if (!authToken) {
@@ -57,105 +62,88 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const orgId = normalizeId(orgIdRaw) || "inlevor";
-    const marketScope = normalizeId(marketScopeRaw) || "br";
-    const marketProjectId = `market__${orgId}__${marketScope}`.slice(0, 180);
-
     const sourceId =
       typeof crypto !== "undefined" && "randomUUID" in crypto
         ? crypto.randomUUID()
         : Math.random().toString(36).slice(2);
 
     const filename = safeFileName(file.name || "documento.pdf");
-    const storagePath = `kb/market/${orgId}/${marketScope}/sources/${sourceId}/${filename}`;
-
+    const storagePath = `studio/kb/market/${orgId}/${MARKET_SCOPE_ID}/${sourceId}/${filename}`;
+    const bucket = blogStorage.bucket();
     const buffer = Buffer.from(await file.arrayBuffer());
-    await portalStorage.bucket().file(storagePath).save(buffer, {
+
+    await bucket.file(storagePath).save(buffer, {
       contentType: file.type || "application/pdf",
       resumable: false,
     });
 
-    const now = new Date();
-    const projectRef = portalDb.collection("kb_projects").doc(marketProjectId);
-    const sourceRef = projectRef.collection("sources").doc(sourceId);
-    const preparationId = `${marketProjectId}__${sourceId}`;
-    const preparationRef = portalDb.collection("kb_preparations").doc(preparationId);
+    const [downloadUrl] = await bucket.file(storagePath).getSignedUrl({
+      version: "v4",
+      action: "read",
+      expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    });
 
-    const projectSnap = await projectRef.get();
-    const nextSourceCount =
-      (projectSnap.exists ? Number(projectSnap.data()?.sourceCount || 0) : 0) + 1;
+    const documentVersion = `${Date.now()}-${buffer.length}-${file.lastModified || 0}`;
+    const updatedAt = new Date().toISOString();
 
-    const batch = portalDb.batch();
-
-    batch.set(
-      projectRef,
-      {
-        entityType: "market",
-        orgId,
-        marketScope,
-        latestSourceId: sourceId,
-        sourceCount: nextSourceCount,
-        updatedAt: now,
-        createdAt: projectSnap.exists ? projectSnap.data()?.createdAt || now : now,
-      },
-      { merge: true },
-    );
-
-    batch.set(
-      sourceRef,
-      {
-        id: sourceId,
-        label: "Documento de mercado",
-        type: "market_doc",
-        documentType: "market_document",
-        entityType: "market",
-        entityId: marketProjectId,
-        linkedProjectId: "",
-        storagePath,
-        owner: "blog",
-        status: "uploaded",
-        preparationStatus: "queued",
-        indexationStatus: "not_started",
-        shouldIndexInKnowledgeBase: true,
-        shouldAffectAutofill: false,
-        shouldAffectPublicDescription: false,
-        kbDomain: "market",
-        orgId,
-        marketScope,
-        createdAt: now,
-        updatedAt: now,
-      },
-      { merge: true },
-    );
-
-    batch.set(
-      preparationRef,
-      {
-        id: preparationId,
-        projectId: marketProjectId,
+    const kbResponse = await fetch(getKbCoreUrl("/kb/sources/register"), {
+      method: "POST",
+      headers: buildKbCoreHeaders({
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      }),
+      body: JSON.stringify({
         sourceId,
-        storagePath,
-        sourceType: "market_doc",
-        documentType: "market_document",
-        status: "queued",
-        autoIndex,
-        kbDomain: "market",
         orgId,
-        marketScope,
-        createdAt: now,
-        updatedAt: now,
-      },
-      { merge: true },
-    );
+        sourceProject: "blog-app",
+        kbDomain: "market",
+        scopeId: MARKET_SCOPE_ID,
+        documentType: "market_document",
+        sourceType: "market_doc",
+        documentVersion,
+        updatedAt,
+        isActive: true,
+        label: filename,
+        storagePath,
+        storage: {
+          provider: "firebase",
+          bucket: bucket.name,
+          storagePath,
+          downloadUrl,
+        },
+        state: state || undefined,
+        city: city || undefined,
+        neighborhood: neighborhood || undefined,
+        options: {
+          autoProcess: autoIndex,
+        },
+      }),
+      cache: "no-store",
+    });
 
-    await batch.commit();
+    const raw = await kbResponse.text();
+    const payload = raw ? JSON.parse(raw) : {};
+
+    if (!kbResponse.ok || !payload?.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            payload?.error || "Falha ao registrar a fonte no KB Core.",
+        },
+        { status: kbResponse.status === 400 ? 400 : 502 },
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      marketProjectId,
       sourceId,
       storagePath,
-      preparationId,
+      scopeId: MARKET_SCOPE_ID,
+      state: state || null,
+      city: city || null,
+      neighborhood: neighborhood || null,
+      preparationId: payload?.preparationId || null,
     });
   } catch (error) {
     console.error("[studio/kb/market/add-source] error:", error);

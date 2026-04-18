@@ -70,6 +70,10 @@ export default function StudioCreatePage() {
   const [tone, setTone] = useState("sofisticado");
   const [audience, setAudience] = useState("investidor");
   const [language, setLanguage] = useState("pt-BR");
+  const [state, setState] = useState("");
+  const [city, setCity] = useState("");
+  const [neighborhood, setNeighborhood] = useState("");
+  const [linkedProjectId, setLinkedProjectId] = useState("");
   const [includeSources, setIncludeSources] = useState(true);
   const [variations, setVariations] = useState(1);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -126,6 +130,10 @@ export default function StudioCreatePage() {
           tone,
           audience,
           language,
+          state: state.trim() || undefined,
+          city: city.trim() || undefined,
+          neighborhood: neighborhood.trim() || undefined,
+          linkedProjectId: linkedProjectId.trim() || undefined,
           includeSources,
           variations,
         }),
@@ -198,7 +206,21 @@ export default function StudioCreatePage() {
       setGenerating(false);
       setStatus(null);
     }
-  }, [prompt, source, format, tone, audience, language, includeSources, variations, toast]);
+  }, [
+    prompt,
+    source,
+    format,
+    tone,
+    audience,
+    language,
+    state,
+    city,
+    neighborhood,
+    linkedProjectId,
+    includeSources,
+    variations,
+    toast,
+  ]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
@@ -394,6 +416,54 @@ export default function StudioCreatePage() {
               </select>
             </div>
 
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-secondary-dark dark:text-secondary-light">
+                Estado
+              </label>
+              <input
+                value={state}
+                onChange={(e) => setState(e.target.value)}
+                className="w-full rounded border border-secondary-dark/30 dark:border-secondary-light/30 bg-transparent px-3 py-2 text-sm"
+                placeholder="sp"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-secondary-dark dark:text-secondary-light">
+                Cidade
+              </label>
+              <input
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="w-full rounded border border-secondary-dark/30 dark:border-secondary-light/30 bg-transparent px-3 py-2 text-sm"
+                placeholder="sao-paulo"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-secondary-dark dark:text-secondary-light">
+                Bairro
+              </label>
+              <input
+                value={neighborhood}
+                onChange={(e) => setNeighborhood(e.target.value)}
+                className="w-full rounded border border-secondary-dark/30 dark:border-secondary-light/30 bg-transparent px-3 py-2 text-sm"
+                placeholder="vila-mariana"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-secondary-dark dark:text-secondary-light">
+                Projeto vinculado
+              </label>
+              <input
+                value={linkedProjectId}
+                onChange={(e) => setLinkedProjectId(e.target.value)}
+                className="w-full rounded border border-secondary-dark/30 dark:border-secondary-light/30 bg-transparent px-3 py-2 text-sm"
+                placeholder="uuid-do-empreendimento"
+              />
+            </div>
+
             {/* Variations */}
             <div className="space-y-1">
               <label className="text-xs font-semibold text-secondary-dark dark:text-secondary-light">
@@ -540,6 +610,7 @@ export default function StudioCreatePage() {
                             {typeof s.score === "number"
                               ? `· score ${s.score.toFixed(3)}`
                               : ""}{" "}
+                            {s.kbDomain ? `· ${s.kbDomain}` : ""}{" "}
                             {s.sectionKind ? `· ${s.sectionKind}` : ""}
                           </div>
                           <div className="text-secondary-dark dark:text-secondary-light">
