@@ -94,6 +94,62 @@ type KbContextRequest = {
   };
 };
 
+type KbProjectFactsPayload = {
+  ok?: boolean;
+  projectFacts?: Record<string, unknown> | null;
+};
+
+async function fetchProjectFactsContext(params: {
+  orgId: string;
+  scopeId: string;
+}): Promise<string> {
+  const orgId = normalizeSlug(params.orgId || "");
+  const scopeId = normalizeSlug(params.scopeId || "");
+  if (!orgId || !scopeId) return "";
+
+  const response = await fetch(
+    `${getKbCoreUrl(`/kb/projects/${encodeURIComponent(scopeId)}/facts`)}?${new URLSearchParams({ orgId }).toString()}`,
+    {
+      method: "GET",
+      headers: buildKbCoreHeaders({ Accept: "application/json" }),
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) return "";
+
+  const payload = (await response.json()) as KbProjectFactsPayload;
+  if (!payload?.ok || !payload?.projectFacts) return "";
+
+  const facts =
+    payload.projectFacts && typeof payload.projectFacts === "object"
+      ? payload.projectFacts
+      : null;
+  if (!facts) return "";
+
+  const summary =
+    facts.latestFactsSummary && typeof facts.latestFactsSummary === "object"
+      ? (facts.latestFactsSummary as Record<string, unknown>)
+      : null;
+
+  const location =
+    facts.location && typeof facts.location === "object"
+      ? (facts.location as Record<string, unknown>)
+      : null;
+
+  const building =
+    facts.building && typeof facts.building === "object"
+      ? (facts.building as Record<string, unknown>)
+      : null;
+
+  const lines: string[] = [];
+  if (summary) lines.push(`Resumo: ${JSON.stringify(summary).slice(0, 900)}`);
+  if (location) lines.push(`Localização: ${JSON.stringify(location).slice(0, 900)}`);
+  if (building) lines.push(`Edificação: ${JSON.stringify(building).slice(0, 900)}`);
+
+  return lines.length ? lines.join("\n") : "";
+}
+
 async function fetchKbContext(
   request: KbContextRequest,
 ): Promise<{ context: string; sources: QdrantSource[] }> {
@@ -355,6 +411,15 @@ export async function POST(request: NextRequest) {
 
         if (source === "qdrant" || source === "both") {
           send({ type: "status", message: "Consultando cérebro (Qdrant)..." });
+          if (linkedProjectId) {
+            const factsContext = await fetchProjectFactsContext({
+              orgId,
+              scopeId: linkedProjectId,
+            });
+            if (factsContext) {
+              combinedContext += `## Facts Estruturados de Projeto\n${factsContext}\n\n`;
+            }
+          }
           const [marketContext, brandContext, projectContext] = await Promise.all([
             fetchKbContext({
               query: prompt,
