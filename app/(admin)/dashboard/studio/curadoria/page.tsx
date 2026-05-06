@@ -4,6 +4,7 @@ import AdminLayout from "@/app/components/layout/AdminLayout";
 import StudioNav from "@/app/components/admin/StudioNav";
 import { useState } from "react";
 import { GuardrailIssue, Action, ActionResult } from "@/app/models/Studio";
+import { withBasePath } from "@/lib/withBasePath";
 
 type ExtractResult = {
   extractedText: string;
@@ -34,7 +35,7 @@ export default function StudioCuradoria() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("/api/studio/curate/pdf", {
+      const res = await fetch(withBasePath("/api/studio/curate/pdf"), {
         method: "POST",
         body: formData,
       });
@@ -54,7 +55,7 @@ export default function StudioCuradoria() {
     setGuardrailBusy(true);
     setIssues([]);
     try {
-      const res = await fetch("/api/studio/guardrails/check", {
+      const res = await fetch(withBasePath("/api/studio/guardrails/check"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -77,7 +78,7 @@ export default function StudioCuradoria() {
     setVisualBusy(true);
     setVisualActions([]);
     try {
-      const res = await fetch("/api/studio/ai/visual", {
+      const res = await fetch(withBasePath("/api/studio/ai/visual"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

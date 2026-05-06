@@ -5,6 +5,7 @@ import StudioNav from "@/app/components/admin/StudioNav";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
+import { withBasePath } from "@/lib/withBasePath";
 
 type Brief = {
   id: string;
@@ -26,7 +27,7 @@ export default function StudioBriefs() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch("/api/studio/briefs");
+        const res = await fetch(withBasePath("/api/studio/briefs"));
         const data = await res.json();
         setBriefs(data.items || []);
       } catch (err) {
@@ -41,7 +42,7 @@ export default function StudioBriefs() {
 
   const handleCreatePost = async (briefId: string) => {
     try {
-      const res = await fetch("/api/studio/briefs/create-post", {
+      const res = await fetch(withBasePath("/api/studio/briefs/create-post"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ briefId }),

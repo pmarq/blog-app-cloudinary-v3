@@ -6,6 +6,7 @@ import StudioNav from "@/app/components/admin/StudioNav";
 import ReactMarkdown from "react-markdown";
 import { auth } from "@/firebase/client";
 import { useToast } from "@/hooks/use-toast";
+import { withBasePath } from "@/lib/withBasePath";
 import {
   CONTENT_FORMATS,
   type ContentFormat,
@@ -117,7 +118,7 @@ export default function StudioCreatePage() {
       const token = await auth.currentUser?.getIdToken();
       if (!token) throw new Error("Sessão necessária. Faça login para continuar.");
 
-      const response = await fetch("/api/studio/ai/generate", {
+      const response = await fetch(withBasePath("/api/studio/ai/generate"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

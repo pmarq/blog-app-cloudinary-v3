@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "@/app/components/layout/AdminLayout";
 import StudioNav from "@/app/components/admin/StudioNav";
 import { auth } from "@/firebase/client";
+import { withBasePath } from "@/lib/withBasePath";
 
 type MarketSource = {
   id: string;
@@ -78,7 +79,7 @@ export default function StudioKbMarketPage() {
       if (city.trim()) params.set("city", city.trim());
       if (neighborhood.trim()) params.set("neighborhood", neighborhood.trim());
 
-      const res = await fetch(`/api/studio/kb/market/sources?${params.toString()}`, {
+      const res = await fetch(withBasePath(`/api/studio/kb/market/sources?${params.toString()}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       const payload = await res.json();
@@ -119,7 +120,7 @@ export default function StudioKbMarketPage() {
       if (neighborhood.trim()) form.append("neighborhood", neighborhood.trim());
       form.append("file", pdf);
 
-      const res = await fetch("/api/studio/kb/market/add-source", {
+      const res = await fetch(withBasePath("/api/studio/kb/market/add-source"), {
         method: "POST",
         body: form,
       });
@@ -151,7 +152,7 @@ export default function StudioKbMarketPage() {
     setBusy(true);
     try {
       const token = await getToken();
-      const res = await fetch("/api/studio/kb/market/test-search", {
+      const res = await fetch(withBasePath("/api/studio/kb/market/test-search"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
