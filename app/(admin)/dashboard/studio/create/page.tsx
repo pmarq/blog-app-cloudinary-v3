@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useRef, useCallback } from "react";
 import AdminLayout from "@/app/components/layout/AdminLayout";
@@ -18,33 +18,33 @@ import {
   type TavilySource,
 } from "@/lib/studio/generate-shared";
 
-// ─── constants ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const SOURCES: { id: KnowledgeSource; label: string; emoji: string; description: string }[] = [
   {
     id: "qdrant",
-    label: "Só Cérebro",
-    emoji: "🧠",
+    label: "SÃ³ CÃ©rebro",
+    emoji: "ðŸ§ ",
     description: "Usa apenas os PDFs e dados indexados da Inlevor",
   },
   {
     id: "tavily",
-    label: "Só Internet",
-    emoji: "🌐",
-    description: "Busca em tempo real nas notícias e web",
+    label: "SÃ³ Internet",
+    emoji: "ðŸŒ",
+    description: "Busca em tempo real nas notÃ­cias e web",
   },
   {
     id: "both",
     label: "Combinado",
-    emoji: "⚡",
-    description: "Cérebro + Internet — mais rico e atualizado",
+    emoji: "âš¡",
+    description: "CÃ©rebro + Internet â€” mais rico e atualizado",
   },
 ];
 
 const TONE_OPTIONS = [
   { value: "sofisticado", label: "Sofisticado" },
-  { value: "acessivel", label: "Acessível" },
-  { value: "tecnico", label: "Técnico" },
+  { value: "acessivel", label: "AcessÃ­vel" },
+  { value: "tecnico", label: "TÃ©cnico" },
   { value: "urgente", label: "Urgente" },
 ];
 
@@ -55,14 +55,14 @@ const AUDIENCE_OPTIONS = [
   { value: "imprensa", label: "Imprensa" },
 ];
 
-// ─── types ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface Sources {
   qdrant: QdrantSource[];
   tavily: TavilySource[];
 }
 
-// ─── main component ───────────────────────────────────────────────────────────
+// â”€â”€â”€ main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function StudioCreatePage() {
   const [prompt, setPrompt] = useState("");
@@ -84,19 +84,20 @@ export default function StudioCreatePage() {
   const [result, setResult] = useState("");
   const [sources, setSources] = useState<Sources | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [showSources, setShowSources] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const { toast } = useToast();
 
-  // ─── generate ───────────────────────────────────────────────────────────────
+  // â”€â”€â”€ generate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleGenerate = useCallback(async () => {
     const trimmedPrompt = prompt.trim();
     if (!trimmedPrompt) {
       toast({
         title: "Prompt vazio",
-        description: "Descreva o que você quer criar.",
+        description: "Descreva o que vocÃª quer criar.",
         variant: "destructive",
       });
       return;
@@ -111,12 +112,13 @@ export default function StudioCreatePage() {
     setResult("");
     setSources(null);
     setError(null);
+    setWarning(null);
     setStatus("Iniciando...");
     setShowSources(false);
 
     try {
       const token = await auth.currentUser?.getIdToken();
-      if (!token) throw new Error("Sessão necessária. Faça login para continuar.");
+      if (!token) throw new Error("SessÃ£o necessÃ¡ria. FaÃ§a login para continuar.");
 
       const response = await fetch(withBasePath("/api/studio/ai/generate"), {
         method: "POST",
@@ -188,8 +190,10 @@ export default function StudioCreatePage() {
             } else if (event.type === "done") {
               setGenerating(false);
               setStatus(null);
+            } else if (event.type === "warning") {
+              setWarning(event.message ?? "Aviso durante a geração.");
             } else if (event.type === "error") {
-              throw new Error(event.message ?? "Erro ao gerar conteúdo.");
+              throw new Error(event.message ?? "Erro ao gerar conteÃºdo.");
             }
           } catch (parseErr) {
             if (parseErr instanceof SyntaxError) continue; // incomplete JSON, skip
@@ -233,9 +237,9 @@ export default function StudioCreatePage() {
     if (!result) return;
     try {
       await navigator.clipboard.writeText(result);
-      toast({ title: "Copiado!", description: "Conteúdo copiado para a área de transferência." });
+      toast({ title: "Copiado!", description: "ConteÃºdo copiado para a Ã¡rea de transferÃªncia." });
     } catch {
-      toast({ title: "Erro", description: "Não foi possível copiar.", variant: "destructive" });
+      toast({ title: "Erro", description: "NÃ£o foi possÃ­vel copiar.", variant: "destructive" });
     }
   }, [result, toast]);
 
@@ -244,6 +248,7 @@ export default function StudioCreatePage() {
     setResult("");
     setSources(null);
     setError(null);
+    setWarning(null);
     setStatus(null);
     setGenerating(false);
     setShowSources(false);
@@ -252,7 +257,7 @@ export default function StudioCreatePage() {
   const totalSources =
     (sources?.qdrant.length ?? 0) + (sources?.tavily.length ?? 0);
 
-  // ─── render ─────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   return (
     <AdminLayout>
@@ -269,7 +274,7 @@ export default function StudioCreatePage() {
           </p>
         </div>
 
-        {/* ── Prompt area ────────────────────────────────────────────────── */}
+        {/* â”€â”€ Prompt area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <div className="space-y-3">
           <textarea
             value={prompt}
@@ -280,15 +285,15 @@ export default function StudioCreatePage() {
               }
             }}
             rows={5}
-            placeholder={`Ex: Crie um post para blog sobre valorização de imóveis de luxo no Jardins em 2025, com dados de mercado, tendências e CTA.`}
+            placeholder={`Ex: Crie um post para blog sobre valorizaÃ§Ã£o de imÃ³veis de luxo no Jardins em 2025, com dados de mercado, tendÃªncias e CTA.`}
             className="w-full rounded border border-secondary-dark/30 dark:border-secondary-light/30 bg-transparent px-4 py-3 text-sm text-highlight-light dark:text-highlight-dark placeholder:text-secondary-dark/50 dark:placeholder:text-secondary-light/50 focus:outline-none focus:ring-1 focus:ring-highlight-light dark:focus:ring-highlight-dark resize-none"
           />
           <p className="text-xs text-secondary-dark/60 dark:text-secondary-light/60">
-            Dica: ⌘+Enter (Mac) ou Ctrl+Enter (Windows) para gerar rapidamente.
+            Dica: âŒ˜+Enter (Mac) ou Ctrl+Enter (Windows) para gerar rapidamente.
           </p>
         </div>
 
-        {/* ── Source selector ─────────────────────────────────────────────── */}
+        {/* â”€â”€ Source selector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <div className="space-y-2">
           <div className="text-xs font-semibold text-secondary-dark dark:text-secondary-light uppercase tracking-wide">
             Fonte de Conhecimento
@@ -319,10 +324,10 @@ export default function StudioCreatePage() {
           </div>
         </div>
 
-        {/* ── Format selector ─────────────────────────────────────────────── */}
+        {/* â”€â”€ Format selector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <div className="space-y-2">
           <div className="text-xs font-semibold text-secondary-dark dark:text-secondary-light uppercase tracking-wide">
-            Formato de Saída
+            Formato de SaÃ­da
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {CONTENT_FORMATS.map((f) => (
@@ -353,7 +358,7 @@ export default function StudioCreatePage() {
           </div>
         </div>
 
-        {/* ── Advanced settings ───────────────────────────────────────────── */}
+        {/* â”€â”€ Advanced settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <details
           open={advancedOpen}
           onToggle={(e) =>
@@ -362,7 +367,7 @@ export default function StudioCreatePage() {
           className="rounded border border-secondary-dark/30 dark:border-secondary-light/20"
         >
           <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-secondary-dark dark:text-secondary-light hover:bg-secondary-light/20 dark:hover:bg-secondary-dark/20 transition rounded select-none">
-            {advancedOpen ? "▾" : "▸"} Configurações Avançadas
+            {advancedOpen ? "â–¾" : "â–¸"} ConfiguraÃ§Ãµes AvanÃ§adas
           </summary>
 
           <div className="px-4 pb-4 pt-2 grid gap-4 sm:grid-cols-2 md:grid-cols-3">
@@ -387,7 +392,7 @@ export default function StudioCreatePage() {
             {/* Audience */}
             <div className="space-y-1">
               <label className="text-xs font-semibold text-secondary-dark dark:text-secondary-light">
-                Público-Alvo
+                PÃºblico-Alvo
               </label>
               <select
                 value={audience}
@@ -412,8 +417,8 @@ export default function StudioCreatePage() {
                 onChange={(e) => setLanguage(e.target.value)}
                 className="w-full rounded border border-secondary-dark/30 dark:border-secondary-light/30 bg-transparent px-3 py-2 text-sm"
               >
-                <option value="pt-BR">Português (PT-BR)</option>
-                <option value="en">Inglês (EN)</option>
+                <option value="pt-BR">PortuguÃªs (PT-BR)</option>
+                <option value="en">InglÃªs (EN)</option>
               </select>
             </div>
 
@@ -461,14 +466,14 @@ export default function StudioCreatePage() {
                 value={linkedProjectId}
                 onChange={(e) => setLinkedProjectId(e.target.value)}
                 className="w-full rounded border border-secondary-dark/30 dark:border-secondary-light/30 bg-transparent px-3 py-2 text-sm"
-                placeholder="uuid-do-empreendimento"
+                placeholder="Opcional: UUID do projeto (auto pelo prompt se vazio)"
               />
             </div>
 
             {/* Variations */}
             <div className="space-y-1">
               <label className="text-xs font-semibold text-secondary-dark dark:text-secondary-light">
-                Variações (1-3)
+                VariaÃ§Ãµes (1-3)
               </label>
               <input
                 type="number"
@@ -497,13 +502,13 @@ export default function StudioCreatePage() {
                 htmlFor="include-sources"
                 className="text-xs text-secondary-dark dark:text-secondary-light select-none"
               >
-                Incluir dados/fontes no conteúdo
+                Incluir dados/fontes no conteÃºdo
               </label>
             </div>
           </div>
         </details>
 
-        {/* ── Generate button ─────────────────────────────────────────────── */}
+        {/* â”€â”€ Generate button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <div className="flex flex-wrap gap-3">
           {!generating ? (
             <button
@@ -512,7 +517,7 @@ export default function StudioCreatePage() {
               disabled={!prompt.trim()}
               className="px-6 py-2.5 rounded border border-highlight-light dark:border-highlight-dark text-highlight-light dark:text-highlight-dark font-semibold text-sm hover:bg-secondary-light/20 dark:hover:bg-secondary-dark/40 transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              ✦ Criar com IA
+              âœ¦ Criar com IA
             </button>
           ) : (
             <button
@@ -520,7 +525,7 @@ export default function StudioCreatePage() {
               onClick={handleStop}
               className="px-6 py-2.5 rounded border border-red-500/60 text-red-500 font-semibold text-sm hover:bg-red-500/10 transition"
             >
-              ■ Parar
+              â–  Parar
             </button>
           )}
 
@@ -535,7 +540,7 @@ export default function StudioCreatePage() {
           )}
         </div>
 
-        {/* ── Status line ─────────────────────────────────────────────────── */}
+        {/* â”€â”€ Status line â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {status && (
           <div className="flex items-center gap-2 text-xs text-secondary-dark dark:text-secondary-light">
             <span className="inline-block h-2 w-2 rounded-full bg-highlight-light dark:bg-highlight-dark animate-pulse" />
@@ -543,14 +548,20 @@ export default function StudioCreatePage() {
           </div>
         )}
 
-        {/* ── Error ───────────────────────────────────────────────────────── */}
+        {warning && (
+          <div className="rounded border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+            {warning}
+          </div>
+        )}
+
+        {/* â”€â”€ Error â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {error && (
           <div className="rounded border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-400">
             {error}
           </div>
         )}
 
-        {/* ── Result area ─────────────────────────────────────────────────── */}
+        {/* â”€â”€ Result area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {(result || generating) && (
           <div className="space-y-3">
             <div className="rounded border border-secondary-dark/30 dark:border-secondary-light/20 bg-secondary-light/5 dark:bg-secondary-dark/20 p-4 min-h-[160px]">
@@ -570,14 +581,14 @@ export default function StudioCreatePage() {
                   onClick={() => void handleCopy()}
                   className="text-xs px-3 py-2 rounded border border-secondary-dark/40 dark:border-secondary-light/30 hover:bg-secondary-light/20 dark:hover:bg-secondary-dark/30 transition"
                 >
-                  📋 Copiar
+                  ðŸ“‹ Copiar
                 </button>
                 <button
                   type="button"
                   onClick={() => void handleGenerate()}
                   className="text-xs px-3 py-2 rounded border border-secondary-dark/40 dark:border-secondary-light/30 hover:bg-secondary-light/20 dark:hover:bg-secondary-dark/30 transition"
                 >
-                  🔄 Refinar (gerar novamente)
+                  ðŸ”„ Refinar (gerar novamente)
                 </button>
 
                 {totalSources > 0 && (
@@ -586,7 +597,7 @@ export default function StudioCreatePage() {
                     onClick={() => setShowSources((v) => !v)}
                     className="text-xs px-3 py-2 rounded border border-secondary-dark/40 dark:border-secondary-light/30 hover:bg-secondary-light/20 dark:hover:bg-secondary-dark/30 transition"
                   >
-                    {showSources ? "▲ Ocultar" : "▼ Ver"} fontes ({totalSources})
+                    {showSources ? "â–² Ocultar" : "â–¼ Ver"} fontes ({totalSources})
                   </button>
                 )}
               </div>
@@ -598,7 +609,7 @@ export default function StudioCreatePage() {
                 {sources.qdrant.length > 0 && (
                   <div>
                     <div className="font-semibold mb-2 text-secondary-dark dark:text-secondary-light">
-                      🧠 Cérebro Qdrant ({sources.qdrant.length})
+                      ðŸ§  CÃ©rebro Qdrant ({sources.qdrant.length})
                     </div>
                     <div className="space-y-2">
                       {sources.qdrant.map((s, i) => (
@@ -609,13 +620,13 @@ export default function StudioCreatePage() {
                           <div className="opacity-70 mb-1">
                             #{i + 1}{" "}
                             {typeof s.score === "number"
-                              ? `· score ${s.score.toFixed(3)}`
+                              ? `Â· score ${s.score.toFixed(3)}`
                               : ""}{" "}
-                            {s.kbDomain ? `· ${s.kbDomain}` : ""}{" "}
-                            {s.sectionKind ? `· ${s.sectionKind}` : ""}
+                            {s.kbDomain ? `Â· ${s.kbDomain}` : ""}{" "}
+                            {s.sectionKind ? `Â· ${s.sectionKind}` : ""}
                           </div>
                           <div className="text-secondary-dark dark:text-secondary-light">
-                            {s.snippet || "—"}
+                            {s.snippet || "â€”"}
                           </div>
                           {s.storagePath && (
                             <div className="opacity-50 mt-1 break-all">
@@ -631,7 +642,7 @@ export default function StudioCreatePage() {
                 {sources.tavily.length > 0 && (
                   <div>
                     <div className="font-semibold mb-2 text-secondary-dark dark:text-secondary-light">
-                      🌐 Internet Tavily ({sources.tavily.length})
+                      ðŸŒ Internet Tavily ({sources.tavily.length})
                     </div>
                     <div className="space-y-2">
                       {sources.tavily.map((s, i) => (
@@ -652,7 +663,7 @@ export default function StudioCreatePage() {
                             <div className="font-semibold">{s.title || `Fonte ${i + 1}`}</div>
                           )}
                           <div className="text-secondary-dark dark:text-secondary-light mt-1">
-                            {s.snippet || "—"}
+                            {s.snippet || "â€”"}
                           </div>
                         </div>
                       ))}

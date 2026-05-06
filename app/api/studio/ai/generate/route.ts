@@ -21,7 +21,16 @@ function getOpenAiKey(): string {
 }
 
 function getTavilyKey(): string | null {
-  return process.env.TAVILY_API_KEY || null;
+  return (
+    process.env.TAVILY_API_KEY ||
+    process.env.TAVILY_KEY ||
+    process.env.TAVILY_TOKEN ||
+    null
+  );
+}
+
+function getTavilySearchUrl(): string {
+  return process.env.TAVILY_SEARCH_URL || "https://api.tavily.com/search";
 }
 
 /** Safely normalize an org/scope slug — cap length first to avoid ReDoS. */
@@ -42,6 +51,49 @@ function normalizeSlug(value: string): string {
   // strip trailing dash
   return result.endsWith("-") ? result.slice(0, -1) : result;
 }
+
+function normalizeIdentifier(value: unknown): string {
+  return String(value ?? "").trim().slice(0, 200);
+}
+
+function normalizeSearchText(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const SEARCH_STOPWORDS = new Set([
+  "a",
+  "o",
+  "e",
+  "de",
+  "da",
+  "do",
+  "das",
+  "dos",
+  "em",
+  "na",
+  "no",
+  "nas",
+  "nos",
+  "um",
+  "uma",
+  "sobre",
+  "para",
+  "com",
+  "sem",
+  "por",
+  "que",
+  "higienopolis",
+  "sao",
+  "paulo",
+  "projeto",
+  "empreendimento",
+]);
 
 // ─── auth ─────────────────────────────────────────────────────────────────────
 
@@ -99,12 +151,155 @@ type KbProjectFactsPayload = {
   projectFacts?: Record<string, unknown> | null;
 };
 
+type KbSourceListItem = {
+  id?: string;
+  label?: string;
+  scopeId?: string;
+  storagePath?: string;
+  kbDomain?: string;
+  sourceProject?: string;
+  isActive?: boolean;
+};
+
+type KbSourceListPayload = {
+  ok?: boolean;
+  sources?: KbSourceListItem[];
+};
+
+type ResolvedProjectMatch = {
+  scopeId: string;
+  sourceId: string;
+  label: string;
+  score: number;
+};
+
+function getStorageBasename(path: string): string {
+  const chunks = String(path || "").split("/");
+  const file = chunks[chunks.length - 1] || "";
+  return file.replace(/\.[a-z0-9]+$/i, "");
+}
+
+function buildProjectAliases(item: KbSourceListItem): string[] {
+  const aliases = [
+    normalizeSearchText(item.label || ""),
+    normalizeSearchText(getStorageBasename(String(item.storagePath || ""))),
+  ]
+    .map((value) =>
+      value
+        .replace(/\b(book|brochura|catalogo|catalog|pdf|docling|prepared)\b/g, " ")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter(Boolean);
+
+  return Array.from(new Set(aliases));
+}
+
+function buildSearchTokens(text: string): Set<string> {
+  const tokens = normalizeSearchText(text)
+    .split(" ")
+    .filter((token) => token && token.length > 2 && !SEARCH_STOPWORDS.has(token));
+  return new Set(tokens);
+}
+
+function scoreProjectMatch(
+  promptNormalized: string,
+  promptTokens: Set<string>,
+  candidate: KbSourceListItem,
+): number {
+  const aliases = buildProjectAliases(candidate);
+  if (!aliases.length) return 0;
+
+  let bestScore = 0;
+  for (const alias of aliases) {
+    const aliasTokens = alias
+      .split(" ")
+      .filter((token) => token && token.length > 2 && !SEARCH_STOPWORDS.has(token));
+    if (!aliasTokens.length) continue;
+
+    let score = 0;
+    if (alias.length >= 6 && promptNormalized.includes(alias)) {
+      score += 6;
+    }
+    let overlap = 0;
+    for (const token of aliasTokens) {
+      if (promptTokens.has(token)) overlap += 1;
+    }
+    score += overlap * 1.5;
+    if (aliasTokens.length >= 2 && overlap === aliasTokens.length) {
+      score += 2;
+    }
+    if (score > bestScore) bestScore = score;
+  }
+
+  return bestScore;
+}
+
+async function fetchProjectSourceCandidates(orgId: string): Promise<KbSourceListItem[]> {
+  const query = new URLSearchParams({
+    orgId,
+    sourceProject: "inlevor-app",
+    kbDomain: "project",
+    isActive: "true",
+    limit: "100",
+  });
+
+  const response = await fetch(`${getKbCoreUrl("/kb/sources")}?${query.toString()}`, {
+    method: "GET",
+    headers: buildKbCoreHeaders({ Accept: "application/json" }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) return [];
+
+  const payload = (await response.json()) as KbSourceListPayload;
+  return Array.isArray(payload?.sources) ? payload.sources : [];
+}
+
+async function resolveLinkedProjectIdFromPrompt(params: {
+  orgId: string;
+  prompt: string;
+}): Promise<ResolvedProjectMatch | null> {
+  const promptNormalized = normalizeSearchText(params.prompt);
+  if (!promptNormalized) return null;
+
+  const promptTokens = buildSearchTokens(promptNormalized);
+  if (!promptTokens.size) return null;
+
+  const candidates = await fetchProjectSourceCandidates(params.orgId);
+  if (!candidates.length) return null;
+
+  const scored = candidates
+    .map((candidate) => {
+      const score = scoreProjectMatch(promptNormalized, promptTokens, candidate);
+      return {
+        scopeId: normalizeIdentifier(candidate.scopeId),
+        sourceId: normalizeIdentifier(candidate.id),
+        label:
+          normalizeIdentifier(candidate.label) ||
+          normalizeIdentifier(getStorageBasename(String(candidate.storagePath || ""))),
+        score,
+      };
+    })
+    .filter((item) => item.scopeId && item.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!scored.length) return null;
+  const top = scored[0];
+  const runnerUp = scored[1];
+
+  if (top.score < 4) return null;
+  if (runnerUp && top.score < runnerUp.score + 1) return null;
+
+  return top;
+}
+
 async function fetchProjectFactsContext(params: {
   orgId: string;
   scopeId: string;
 }): Promise<string> {
   const orgId = normalizeSlug(params.orgId || "");
-  const scopeId = normalizeSlug(params.scopeId || "");
+  const scopeId = normalizeIdentifier(params.scopeId || "");
   if (!orgId || !scopeId) return "";
 
   const response = await fetch(
@@ -210,16 +405,23 @@ async function fetchKbContext(
 
 async function fetchTavilyContext(
   query: string
-): Promise<{ context: string; sources: TavilySource[] }> {
+): Promise<{ context: string; sources: TavilySource[]; warning?: string }> {
   const apiKey = getTavilyKey();
   if (!apiKey) {
     console.warn("[generate] TAVILY_API_KEY not set, skipping web search.");
-    return { context: "", sources: [] };
+    return {
+      context: "",
+      sources: [],
+      warning: "Tavily indisponível: TAVILY_API_KEY não configurada.",
+    };
   }
 
-  const response = await fetch("https://api.tavily.com/search", {
+  const response = await fetch(getTavilySearchUrl(), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
     body: JSON.stringify({
       api_key: apiKey,
       query,
@@ -233,8 +435,16 @@ async function fetchTavilyContext(
   });
 
   if (!response.ok) {
-    console.warn("[generate] Tavily search failed:", response.status);
-    return { context: "", sources: [] };
+    const raw = await response.text().catch(() => "");
+    console.warn("[generate] Tavily search failed:", response.status, raw);
+    const isAuthError = response.status === 401 || response.status === 403;
+    return {
+      context: "",
+      sources: [],
+      warning: isAuthError
+        ? "Tavily rejeitou a credencial (401/403). Verifique TAVILY_API_KEY."
+        : `Tavily falhou com status ${response.status}.`,
+    };
   }
 
   type TavilyResult = {
@@ -268,6 +478,14 @@ async function fetchTavilyContext(
       .filter((s) => s.snippet)
       .map((s, i) => `[Web ${i + 1} — ${s.title}]: ${s.snippet}`)
       .join("\n\n");
+
+  if (!sources.length) {
+    return {
+      context,
+      sources,
+      warning: "Tavily não retornou resultados para este prompt.",
+    };
+  }
 
   return { context, sources };
 }
@@ -386,7 +604,7 @@ export async function POST(request: NextRequest) {
   const state = normalizeSlug(String(body.state ?? ""));
   const city = normalizeSlug(String(body.city ?? ""));
   const neighborhood = normalizeSlug(String(body.neighborhood ?? ""));
-  const linkedProjectId = normalizeSlug(String(body.linkedProjectId ?? ""));
+  const linkedProjectId = normalizeIdentifier(String(body.linkedProjectId ?? ""));
 
   // 3. SSE stream
   const encoder = new TextEncoder();
@@ -408,13 +626,32 @@ export async function POST(request: NextRequest) {
         let qdrantSources: QdrantSource[] = [];
         let tavilySources: TavilySource[] = [];
         let combinedContext = "";
+        let effectiveLinkedProjectId = linkedProjectId;
+
+        if (!effectiveLinkedProjectId && (source === "qdrant" || source === "both")) {
+          send({ type: "status", message: "Identificando projeto automaticamente..." });
+          const resolvedProject = await resolveLinkedProjectIdFromPrompt({ orgId, prompt });
+          if (resolvedProject?.scopeId) {
+            effectiveLinkedProjectId = resolvedProject.scopeId;
+            send({
+              type: "status",
+              message: `Projeto identificado: ${resolvedProject.label || resolvedProject.scopeId}`,
+            });
+          } else {
+            send({
+              type: "warning",
+              message:
+                "Não foi possível vincular projeto automaticamente. Informe o projeto vinculado para contexto mais preciso.",
+            });
+          }
+        }
 
         if (source === "qdrant" || source === "both") {
           send({ type: "status", message: "Consultando cérebro (Qdrant)..." });
-          if (linkedProjectId) {
+          if (effectiveLinkedProjectId) {
             const factsContext = await fetchProjectFactsContext({
               orgId,
-              scopeId: linkedProjectId,
+              scopeId: effectiveLinkedProjectId,
             });
             if (factsContext) {
               combinedContext += `## Facts Estruturados de Projeto\n${factsContext}\n\n`;
@@ -442,15 +679,15 @@ export async function POST(request: NextRequest) {
               limit: 4,
               scoreThreshold: 0.3,
             }),
-            linkedProjectId
+            effectiveLinkedProjectId
               ? fetchKbContext({
                   query: prompt,
                   orgId,
                   kbDomain: "project",
-                  scopeId: linkedProjectId,
+                  scopeId: effectiveLinkedProjectId,
                   limit: 5,
                   scoreThreshold: 0.3,
-                  filters: { linkedProjectId },
+                  filters: { linkedProjectId: effectiveLinkedProjectId },
                 })
               : Promise.resolve({ context: "", sources: [] }),
           ]);
@@ -472,8 +709,12 @@ export async function POST(request: NextRequest) {
 
         if (source === "tavily" || source === "both") {
           send({ type: "status", message: "Pesquisando na internet (Tavily)..." });
-          const { context, sources } = await fetchTavilyContext(prompt);
+          const { context, sources, warning } = await fetchTavilyContext(prompt);
           tavilySources = sources;
+          if (warning) send({ type: "warning", message: warning });
+          if (source === "tavily" && !context) {
+            throw new Error(warning || "Tavily não retornou resultados para este prompt.");
+          }
           if (context) combinedContext += `## Pesquisa Web\n${context}\n\n`;
         }
 
