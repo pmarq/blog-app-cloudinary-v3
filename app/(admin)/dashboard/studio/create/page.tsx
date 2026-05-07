@@ -18,33 +18,33 @@ import {
   type TavilySource,
 } from "@/lib/studio/generate-shared";
 
-// â”€â”€â”€ constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── constants ────────────────────────────────────────────────────────────────
 
 const SOURCES: { id: KnowledgeSource; label: string; emoji: string; description: string }[] = [
   {
     id: "qdrant",
-    label: "SÃ³ CÃ©rebro",
-    emoji: "ðŸ§ ",
+    label: "Só Cérebro",
+    emoji: "🧠",
     description: "Usa apenas os PDFs e dados indexados da Inlevor",
   },
   {
     id: "tavily",
-    label: "SÃ³ Internet",
-    emoji: "ðŸŒ",
-    description: "Busca em tempo real nas notÃ­cias e web",
+    label: "Só Internet",
+    emoji: "🌐",
+    description: "Busca em tempo real nas notícias e web",
   },
   {
     id: "both",
     label: "Combinado",
-    emoji: "âš¡",
-    description: "CÃ©rebro + Internet â€” mais rico e atualizado",
+    emoji: "⚡",
+    description: "Cérebro + Internet — mais rico e atualizado",
   },
 ];
 
 const TONE_OPTIONS = [
   { value: "sofisticado", label: "Sofisticado" },
-  { value: "acessivel", label: "AcessÃ­vel" },
-  { value: "tecnico", label: "TÃ©cnico" },
+  { value: "acessivel", label: "Acessível" },
+  { value: "tecnico", label: "Técnico" },
   { value: "urgente", label: "Urgente" },
 ];
 
@@ -55,7 +55,7 @@ const AUDIENCE_OPTIONS = [
   { value: "imprensa", label: "Imprensa" },
 ];
 
-// â”€â”€â”€ types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── types ────────────────────────────────────────────────────────────────────
 
 interface Sources {
   qdrant: QdrantSource[];
@@ -67,7 +67,7 @@ interface RetrieveMeta {
   confidence: number | null;
 }
 
-// â”€â”€â”€ main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── main component ───────────────────────────────────────────────────────────
 
 export default function StudioCreatePage() {
   const [prompt, setPrompt] = useState("");
@@ -96,14 +96,14 @@ export default function StudioCreatePage() {
   const abortRef = useRef<AbortController | null>(null);
   const { toast } = useToast();
 
-  // â”€â”€â”€ generate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── generate ───────────────────────────────────────────────────────────────
 
   const handleGenerate = useCallback(async () => {
     const trimmedPrompt = prompt.trim();
     if (!trimmedPrompt) {
       toast({
         title: "Prompt vazio",
-        description: "Descreva o que vocÃª quer criar.",
+        description: "Descreva o que você quer criar.",
         variant: "destructive",
       });
       return;
@@ -125,7 +125,7 @@ export default function StudioCreatePage() {
 
     try {
       const token = await auth.currentUser?.getIdToken();
-      if (!token) throw new Error("SessÃ£o necessÃ¡ria. FaÃ§a login para continuar.");
+      if (!token) throw new Error("Sessão necessária. Faça login para continuar.");
 
       const response = await fetch(withBasePath("/api/studio/ai/generate"), {
         method: "POST",
@@ -208,7 +208,7 @@ export default function StudioCreatePage() {
             } else if (event.type === "warning") {
               setWarning(event.message ?? "Aviso durante a geração.");
             } else if (event.type === "error") {
-              throw new Error(event.message ?? "Erro ao gerar conteÃºdo.");
+              throw new Error(event.message ?? "Erro ao gerar conteúdo.");
             }
           } catch (parseErr) {
             if (parseErr instanceof SyntaxError) continue; // incomplete JSON, skip
@@ -252,9 +252,9 @@ export default function StudioCreatePage() {
     if (!result) return;
     try {
       await navigator.clipboard.writeText(result);
-      toast({ title: "Copiado!", description: "ConteÃºdo copiado para a Ã¡rea de transferÃªncia." });
+      toast({ title: "Copiado!", description: "Conteúdo copiado para a área de transferência." });
     } catch {
-      toast({ title: "Erro", description: "NÃ£o foi possÃ­vel copiar.", variant: "destructive" });
+      toast({ title: "Erro", description: "Não foi possível copiar.", variant: "destructive" });
     }
   }, [result, toast]);
 
@@ -273,7 +273,7 @@ export default function StudioCreatePage() {
   const totalSources =
     (sources?.qdrant.length ?? 0) + (sources?.tavily.length ?? 0);
 
-  // â”€â”€â”€ render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── render ─────────────────────────────────────────────────────────────────
 
   return (
     <AdminLayout>
@@ -290,7 +290,7 @@ export default function StudioCreatePage() {
           </p>
         </div>
 
-        {/* â”€â”€ Prompt area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ── Prompt area ────────────────────────────────────────────────── */}
         <div className="space-y-3">
           <textarea
             value={prompt}
@@ -301,15 +301,15 @@ export default function StudioCreatePage() {
               }
             }}
             rows={5}
-            placeholder={`Ex: Crie um post para blog sobre valorizaÃ§Ã£o de imÃ³veis de luxo no Jardins em 2025, com dados de mercado, tendÃªncias e CTA.`}
+            placeholder={`Ex: Crie um post para blog sobre valorização de imóveis de luxo no Jardins em 2025, com dados de mercado, tendências e CTA.`}
             className="w-full rounded border border-secondary-dark/30 dark:border-secondary-light/30 bg-transparent px-4 py-3 text-sm text-highlight-light dark:text-highlight-dark placeholder:text-secondary-dark/50 dark:placeholder:text-secondary-light/50 focus:outline-none focus:ring-1 focus:ring-highlight-light dark:focus:ring-highlight-dark resize-none"
           />
           <p className="text-xs text-secondary-dark/60 dark:text-secondary-light/60">
-            Dica: âŒ˜+Enter (Mac) ou Ctrl+Enter (Windows) para gerar rapidamente.
+            Dica: ⌘+Enter (Mac) ou Ctrl+Enter (Windows) para gerar rapidamente.
           </p>
         </div>
 
-        {/* â”€â”€ Source selector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ── Source selector ─────────────────────────────────────────────── */}
         <div className="space-y-2">
           <div className="text-xs font-semibold text-secondary-dark dark:text-secondary-light uppercase tracking-wide">
             Fonte de Conhecimento
@@ -340,10 +340,10 @@ export default function StudioCreatePage() {
           </div>
         </div>
 
-        {/* â”€â”€ Format selector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ── Format selector ─────────────────────────────────────────────── */}
         <div className="space-y-2">
           <div className="text-xs font-semibold text-secondary-dark dark:text-secondary-light uppercase tracking-wide">
-            Formato de SaÃ­da
+            Formato de Saída
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {CONTENT_FORMATS.map((f) => (
@@ -374,7 +374,7 @@ export default function StudioCreatePage() {
           </div>
         </div>
 
-        {/* â”€â”€ Advanced settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ── Advanced settings ───────────────────────────────────────────── */}
         <details
           open={advancedOpen}
           onToggle={(e) =>
@@ -383,7 +383,7 @@ export default function StudioCreatePage() {
           className="rounded border border-secondary-dark/30 dark:border-secondary-light/20"
         >
           <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-secondary-dark dark:text-secondary-light hover:bg-secondary-light/20 dark:hover:bg-secondary-dark/20 transition rounded select-none">
-            {advancedOpen ? "â–¾" : "â–¸"} ConfiguraÃ§Ãµes AvanÃ§adas
+            {advancedOpen ? "▾" : "▸"} Configurações Avançadas
           </summary>
 
           <div className="px-4 pb-4 pt-2 grid gap-4 sm:grid-cols-2 md:grid-cols-3">
@@ -408,7 +408,7 @@ export default function StudioCreatePage() {
             {/* Audience */}
             <div className="space-y-1">
               <label className="text-xs font-semibold text-secondary-dark dark:text-secondary-light">
-                PÃºblico-Alvo
+                Público-Alvo
               </label>
               <select
                 value={audience}
@@ -433,8 +433,8 @@ export default function StudioCreatePage() {
                 onChange={(e) => setLanguage(e.target.value)}
                 className="w-full rounded border border-secondary-dark/30 dark:border-secondary-light/30 bg-transparent px-3 py-2 text-sm"
               >
-                <option value="pt-BR">PortuguÃªs (PT-BR)</option>
-                <option value="en">InglÃªs (EN)</option>
+                <option value="pt-BR">Português (PT-BR)</option>
+                <option value="en">Inglês (EN)</option>
               </select>
             </div>
 
@@ -489,7 +489,7 @@ export default function StudioCreatePage() {
             {/* Variations */}
             <div className="space-y-1">
               <label className="text-xs font-semibold text-secondary-dark dark:text-secondary-light">
-                VariaÃ§Ãµes (1-3)
+                Variações (1-3)
               </label>
               <input
                 type="number"
@@ -518,13 +518,13 @@ export default function StudioCreatePage() {
                 htmlFor="include-sources"
                 className="text-xs text-secondary-dark dark:text-secondary-light select-none"
               >
-                Incluir dados/fontes no conteÃºdo
+                Incluir dados/fontes no conteúdo
               </label>
             </div>
           </div>
         </details>
 
-        {/* â”€â”€ Generate button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ── Generate button ─────────────────────────────────────────────── */}
         <div className="flex flex-wrap gap-3">
           {!generating ? (
             <button
@@ -533,7 +533,7 @@ export default function StudioCreatePage() {
               disabled={!prompt.trim()}
               className="px-6 py-2.5 rounded border border-highlight-light dark:border-highlight-dark text-highlight-light dark:text-highlight-dark font-semibold text-sm hover:bg-secondary-light/20 dark:hover:bg-secondary-dark/40 transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              âœ¦ Criar com IA
+              ✦ Criar com IA
             </button>
           ) : (
             <button
@@ -541,7 +541,7 @@ export default function StudioCreatePage() {
               onClick={handleStop}
               className="px-6 py-2.5 rounded border border-red-500/60 text-red-500 font-semibold text-sm hover:bg-red-500/10 transition"
             >
-              â–  Parar
+              ■ Parar
             </button>
           )}
 
@@ -556,7 +556,7 @@ export default function StudioCreatePage() {
           )}
         </div>
 
-        {/* â”€â”€ Status line â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ── Status line ─────────────────────────────────────────────────── */}
         {status && (
           <div className="flex items-center gap-2 text-xs text-secondary-dark dark:text-secondary-light">
             <span className="inline-block h-2 w-2 rounded-full bg-highlight-light dark:bg-highlight-dark animate-pulse" />
@@ -579,14 +579,14 @@ export default function StudioCreatePage() {
           </div>
         )}
 
-        {/* â”€â”€ Error â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ── Error ───────────────────────────────────────────────────────── */}
         {error && (
           <div className="rounded border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-400">
             {error}
           </div>
         )}
 
-        {/* â”€â”€ Result area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ── Result area ─────────────────────────────────────────────────── */}
         {(result || generating) && (
           <div className="space-y-3">
             <div className="rounded border border-secondary-dark/30 dark:border-secondary-light/20 bg-secondary-light/5 dark:bg-secondary-dark/20 p-4 min-h-[160px]">
@@ -606,14 +606,14 @@ export default function StudioCreatePage() {
                   onClick={() => void handleCopy()}
                   className="text-xs px-3 py-2 rounded border border-secondary-dark/40 dark:border-secondary-light/30 hover:bg-secondary-light/20 dark:hover:bg-secondary-dark/30 transition"
                 >
-                  ðŸ“‹ Copiar
+                  📋 Copiar
                 </button>
                 <button
                   type="button"
                   onClick={() => void handleGenerate()}
                   className="text-xs px-3 py-2 rounded border border-secondary-dark/40 dark:border-secondary-light/30 hover:bg-secondary-light/20 dark:hover:bg-secondary-dark/30 transition"
                 >
-                  ðŸ”„ Refinar (gerar novamente)
+                  🔄 Refinar (gerar novamente)
                 </button>
 
                 {totalSources > 0 && (
@@ -622,7 +622,7 @@ export default function StudioCreatePage() {
                     onClick={() => setShowSources((v) => !v)}
                     className="text-xs px-3 py-2 rounded border border-secondary-dark/40 dark:border-secondary-light/30 hover:bg-secondary-light/20 dark:hover:bg-secondary-dark/30 transition"
                   >
-                    {showSources ? "â–² Ocultar" : "â–¼ Ver"} fontes ({totalSources})
+                    {showSources ? "▲ Ocultar" : "▼ Ver"} fontes ({totalSources})
                   </button>
                 )}
               </div>
@@ -634,7 +634,7 @@ export default function StudioCreatePage() {
                 {sources.qdrant.length > 0 && (
                   <div>
                     <div className="font-semibold mb-2 text-secondary-dark dark:text-secondary-light">
-                      ðŸ§  CÃ©rebro Qdrant ({sources.qdrant.length})
+                      🧠 Cérebro Qdrant ({sources.qdrant.length})
                     </div>
                     <div className="space-y-2">
                       {sources.qdrant.map((s, i) => (
@@ -645,13 +645,13 @@ export default function StudioCreatePage() {
                           <div className="opacity-70 mb-1">
                             #{i + 1}{" "}
                             {typeof s.score === "number"
-                              ? `Â· score ${s.score.toFixed(3)}`
+                              ? `· score ${s.score.toFixed(3)}`
                               : ""}{" "}
-                            {s.kbDomain ? `Â· ${s.kbDomain}` : ""}{" "}
-                            {s.sectionKind ? `Â· ${s.sectionKind}` : ""}
+                            {s.kbDomain ? `· ${s.kbDomain}` : ""}{" "}
+                            {s.sectionKind ? `· ${s.sectionKind}` : ""}
                           </div>
                           <div className="text-secondary-dark dark:text-secondary-light">
-                            {s.snippet || "â€”"}
+                            {s.snippet || "—"}
                           </div>
                           {s.storagePath && (
                             <div className="opacity-50 mt-1 break-all">
@@ -667,7 +667,7 @@ export default function StudioCreatePage() {
                 {sources.tavily.length > 0 && (
                   <div>
                     <div className="font-semibold mb-2 text-secondary-dark dark:text-secondary-light">
-                      ðŸŒ Internet Tavily ({sources.tavily.length})
+                      🌐 Internet Tavily ({sources.tavily.length})
                     </div>
                     <div className="space-y-2">
                       {sources.tavily.map((s, i) => (
@@ -688,7 +688,7 @@ export default function StudioCreatePage() {
                             <div className="font-semibold">{s.title || `Fonte ${i + 1}`}</div>
                           )}
                           <div className="text-secondary-dark dark:text-secondary-light mt-1">
-                            {s.snippet || "â€”"}
+                            {s.snippet || "—"}
                           </div>
                         </div>
                       ))}
