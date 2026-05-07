@@ -62,6 +62,11 @@ interface Sources {
   tavily: TavilySource[];
 }
 
+interface RetrieveMeta {
+  mode: string;
+  confidence: number | null;
+}
+
 // â”€â”€â”€ main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function StudioCreatePage() {
@@ -83,6 +88,7 @@ export default function StudioCreatePage() {
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState("");
   const [sources, setSources] = useState<Sources | null>(null);
+  const [retrieveMeta, setRetrieveMeta] = useState<RetrieveMeta | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [showSources, setShowSources] = useState(false);
@@ -111,6 +117,7 @@ export default function StudioCreatePage() {
     setGenerating(true);
     setResult("");
     setSources(null);
+    setRetrieveMeta(null);
     setError(null);
     setWarning(null);
     setStatus("Iniciando...");
@@ -175,6 +182,8 @@ export default function StudioCreatePage() {
               message?: string;
               qdrant?: QdrantSource[];
               tavily?: TavilySource[];
+              mode?: string;
+              confidence?: number | null;
             };
 
             if (event.type === "status") {
@@ -186,6 +195,12 @@ export default function StudioCreatePage() {
               setSources({
                 qdrant: event.qdrant ?? [],
                 tavily: event.tavily ?? [],
+              });
+            } else if (event.type === "retrieve_meta") {
+              setRetrieveMeta({
+                mode: String(event.mode ?? "unknown"),
+                confidence:
+                  typeof event.confidence === "number" ? event.confidence : null,
               });
             } else if (event.type === "done") {
               setGenerating(false);
@@ -247,6 +262,7 @@ export default function StudioCreatePage() {
     abortRef.current?.abort();
     setResult("");
     setSources(null);
+    setRetrieveMeta(null);
     setError(null);
     setWarning(null);
     setStatus(null);
@@ -551,6 +567,15 @@ export default function StudioCreatePage() {
         {warning && (
           <div className="rounded border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             {warning}
+          </div>
+        )}
+
+        {retrieveMeta && (
+          <div className="text-xs text-secondary-dark dark:text-secondary-light">
+            Retrieve: <span className="font-semibold">{retrieveMeta.mode}</span>
+            {retrieveMeta.confidence !== null
+              ? ` · confiança ${(retrieveMeta.confidence * 100).toFixed(0)}%`
+              : ""}
           </div>
         )}
 

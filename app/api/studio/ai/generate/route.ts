@@ -20,19 +20,6 @@ function getOpenAiKey(): string {
   return key;
 }
 
-function getTavilyKey(): string | null {
-  return (
-    process.env.TAVILY_API_KEY ||
-    process.env.TAVILY_KEY ||
-    process.env.TAVILY_TOKEN ||
-    null
-  );
-}
-
-function getTavilySearchUrl(): string {
-  return process.env.TAVILY_SEARCH_URL || "https://api.tavily.com/search";
-}
-
 /** Safely normalize an org/scope slug — cap length first to avoid ReDoS. */
 function normalizeSlug(value: string): string {
   const capped = value.trim().slice(0, 200).toLowerCase();
@@ -123,29 +110,6 @@ interface GenerateRequestBody {
 
 // ─── Qdrant retrieval ─────────────────────────────────────────────────────────
 
-type KbRetrieveResult = {
-  id?: string;
-  score?: number | null;
-  snippet?: string;
-  text?: string;
-  payload?: Record<string, unknown>;
-};
-
-type KbContextRequest = {
-  query: string;
-  orgId: string;
-  kbDomain: "market" | "brand" | "project";
-  scopeId: string;
-  limit: number;
-  scoreThreshold?: number;
-  filters?: {
-    state?: string;
-    city?: string;
-    neighborhood?: string;
-    linkedProjectId?: string;
-  };
-};
-
 type KbProjectFactsPayload = {
   ok?: boolean;
   projectFacts?: Record<string, unknown> | null;
@@ -171,6 +135,32 @@ type ResolvedProjectMatch = {
   sourceId: string;
   label: string;
   score: number;
+};
+
+type RetrieveMode = "kb_only" | "web_only" | "hybrid" | "auto";
+
+type OrchestratedCitation = {
+  sourceType?: "kb" | "web";
+  id?: string;
+  sourceId?: string | null;
+  title?: string;
+  snippet?: string;
+  score?: number | null;
+  url?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+type OrchestratedRetrievePayload = {
+  ok?: boolean;
+  strategy?: {
+    selectedMode?: "kb_only" | "web_only" | "hybrid";
+    requestedMode?: string;
+    reason?: string;
+  };
+  confidence?: number;
+  evidenceSufficient?: boolean;
+  citations?: OrchestratedCitation[];
+  warnings?: string[];
 };
 
 function getStorageBasename(path: string): string {
@@ -345,149 +335,121 @@ async function fetchProjectFactsContext(params: {
   return lines.length ? lines.join("\n") : "";
 }
 
-async function fetchKbContext(
-  request: KbContextRequest,
-): Promise<{ context: string; sources: QdrantSource[] }> {
-  const response = await fetch(getKbCoreUrl("/kb/retrieve"), {
+function mapSourceToRetrieveMode(source: KnowledgeSource): RetrieveMode {
+  if (source === "qdrant") return "kb_only";
+  if (source === "tavily") return "web_only";
+  if (source === "both") return "hybrid";
+  return "auto";
+}
+
+function buildContextFromCitations(citations: OrchestratedCitation[]): string {
+  const lines = citations
+    .map((citation, index) => {
+      const sourceType = citation.sourceType === "web" ? "Web" : "KB";
+      const title = String(citation.title ?? "").trim();
+      const snippet = String(citation.snippet ?? "").trim();
+      if (!snippet) return "";
+      return `[${sourceType} ${index + 1}${title ? ` — ${title}` : ""}]: ${snippet}`;
+    })
+    .filter(Boolean);
+  return lines.join("\n\n");
+}
+
+async function fetchOrchestratedRetrieve(params: {
+  query: string;
+  orgId: string;
+  source: KnowledgeSource;
+  state?: string;
+  city?: string;
+  neighborhood?: string;
+  linkedProjectId?: string;
+}): Promise<{
+  context: string;
+  qdrantSources: QdrantSource[];
+  tavilySources: TavilySource[];
+  warnings: string[];
+  confidence: number | null;
+  selectedMode: string;
+}> {
+  const body: Record<string, unknown> = {
+    query: params.query,
+    orgId: params.orgId,
+    mode: mapSourceToRetrieveMode(params.source),
+    sourceProject: "inlevor-app",
+    isActive: true,
+    limit: 10,
+    webLimit: 5,
+  };
+
+  if (params.state) body.state = params.state;
+  if (params.city) body.city = params.city;
+  if (params.neighborhood) body.neighborhood = params.neighborhood;
+  if (params.linkedProjectId) {
+    body.linkedProjectId = params.linkedProjectId;
+    body.scopeId = params.linkedProjectId;
+    body.projectId = params.linkedProjectId;
+    body.kbDomain = "project";
+  } else if (params.state || params.city || params.neighborhood) {
+    body.kbDomain = "market";
+  }
+
+  const response = await fetch(getKbCoreUrl("/ai/retrieve/orchestrated"), {
     method: "POST",
     headers: buildKbCoreHeaders({
       "Content-Type": "application/json",
       Accept: "application/json",
     }),
-    body: JSON.stringify(request),
+    body: JSON.stringify(body),
     cache: "no-store",
   });
 
   if (!response.ok) {
-    console.warn(
-      `[generate] KB retrieve failed for ${request.kbDomain}:`,
-      response.status,
+    const errorText = await response.text().catch(() => "");
+    throw new Error(
+      `Retrieve orquestrado falhou (${response.status})${errorText ? `: ${errorText.slice(0, 240)}` : ""}`,
     );
-    return { context: "", sources: [] };
   }
 
-  const payload = (await response.json()) as { results?: KbRetrieveResult[] };
-  const results: KbRetrieveResult[] = Array.isArray(payload?.results)
-    ? payload.results
+  const payload = (await response.json()) as OrchestratedRetrievePayload;
+  const citations = Array.isArray(payload?.citations) ? payload.citations : [];
+  const warnings = Array.isArray(payload?.warnings)
+    ? payload.warnings.map((item) => String(item)).filter(Boolean)
     : [];
 
-  const sources: QdrantSource[] = results.map((result) => {
-    const sourcePayload = result.payload || {};
-    return {
-      id: String(result.id ?? ""),
-      score: typeof result.score === "number" ? result.score : null,
-      snippet: String(
-        result.snippet ?? result.text ?? sourcePayload.snippet ?? sourcePayload.text ?? "",
-      ).slice(0, 400),
-      storagePath: String(sourcePayload.storagePath ?? ""),
-      sectionKind: String(sourcePayload.sectionKind ?? ""),
-      kbDomain: String(sourcePayload.kbDomain ?? request.kbDomain),
-      documentType: String(sourcePayload.documentType ?? ""),
-    };
-  });
+  const qdrantSources: QdrantSource[] = citations
+    .filter((citation) => citation?.sourceType === "kb")
+    .map((citation) => {
+      const metadata =
+        citation.metadata && typeof citation.metadata === "object"
+          ? citation.metadata
+          : {};
+      return {
+        id: String(citation.id ?? ""),
+        score: typeof citation.score === "number" ? citation.score : null,
+        snippet: String(citation.snippet ?? "").slice(0, 400),
+        storagePath: String((metadata as Record<string, unknown>).storagePath ?? ""),
+        sectionKind: String((metadata as Record<string, unknown>).sectionKind ?? ""),
+        kbDomain: String((metadata as Record<string, unknown>).kbDomain ?? ""),
+        documentType: String((metadata as Record<string, unknown>).documentType ?? ""),
+      };
+    });
 
-  const title =
-    request.kbDomain === "brand"
-      ? "Conhecimento de Marca"
-      : request.kbDomain === "project"
-        ? "Conhecimento de Projeto"
-        : "Conhecimento de Mercado";
+  const tavilySources: TavilySource[] = citations
+    .filter((citation) => citation?.sourceType === "web")
+    .map((citation) => ({
+      title: String(citation.title ?? ""),
+      url: String(citation.url ?? ""),
+      snippet: String(citation.snippet ?? "").slice(0, 400),
+    }));
 
-  const context = sources
-    .filter((source) => source.snippet)
-    .map((source, index) => `[${title} ${index + 1}]: ${source.snippet}`)
-    .join("\n\n");
-
-  return { context, sources };
-}
-
-// ─── Tavily web search ────────────────────────────────────────────────────────
-
-async function fetchTavilyContext(
-  query: string
-): Promise<{ context: string; sources: TavilySource[]; warning?: string }> {
-  const apiKey = getTavilyKey();
-  if (!apiKey) {
-    console.warn("[generate] TAVILY_API_KEY not set, skipping web search.");
-    return {
-      context: "",
-      sources: [],
-      warning: "Tavily indisponível: TAVILY_API_KEY não configurada.",
-    };
-  }
-
-  const response = await fetch(getTavilySearchUrl(), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      api_key: apiKey,
-      query,
-      search_depth: "advanced",
-      include_answer: true,
-      max_results: 5,
-      include_domains: [],
-      exclude_domains: [],
-    }),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const raw = await response.text().catch(() => "");
-    console.warn("[generate] Tavily search failed:", response.status, raw);
-    const isAuthError = response.status === 401 || response.status === 403;
-    return {
-      context: "",
-      sources: [],
-      warning: isAuthError
-        ? "Tavily rejeitou a credencial (401/403). Verifique TAVILY_API_KEY."
-        : `Tavily falhou com status ${response.status}.`,
-    };
-  }
-
-  type TavilyResult = {
-    title?: string;
-    url?: string;
-    content?: string;
+  return {
+    context: buildContextFromCitations(citations),
+    qdrantSources,
+    tavilySources,
+    warnings,
+    confidence: typeof payload?.confidence === "number" ? payload.confidence : null,
+    selectedMode: String(payload?.strategy?.selectedMode ?? "unknown"),
   };
-
-  const payload = (await response.json()) as {
-    answer?: string;
-    results?: TavilyResult[];
-  };
-
-  const results: TavilyResult[] = Array.isArray(payload?.results)
-    ? payload.results
-    : [];
-
-  const sources: TavilySource[] = results.map((r) => ({
-    title: String(r.title ?? ""),
-    url: String(r.url ?? ""),
-    snippet: String(r.content ?? "").slice(0, 400),
-  }));
-
-  const answerLine = payload?.answer
-    ? `[Resposta web]: ${payload.answer}\n\n`
-    : "";
-
-  const context =
-    answerLine +
-    sources
-      .filter((s) => s.snippet)
-      .map((s, i) => `[Web ${i + 1} — ${s.title}]: ${s.snippet}`)
-      .join("\n\n");
-
-  if (!sources.length) {
-    return {
-      context,
-      sources,
-      warning: "Tavily não retornou resultados para este prompt.",
-    };
-  }
-
-  return { context, sources };
 }
 
 // ─── OpenAI streaming ─────────────────────────────────────────────────────────
@@ -627,6 +589,8 @@ export async function POST(request: NextRequest) {
         let tavilySources: TavilySource[] = [];
         let combinedContext = "";
         let effectiveLinkedProjectId = linkedProjectId;
+        let retrieveMode = "unknown";
+        let retrieveConfidence: number | null = null;
 
         if (!effectiveLinkedProjectId && (source === "qdrant" || source === "both")) {
           send({ type: "status", message: "Identificando projeto automaticamente..." });
@@ -647,7 +611,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (source === "qdrant" || source === "both") {
-          send({ type: "status", message: "Consultando cérebro (Qdrant)..." });
+          send({ type: "status", message: "Carregando facts estruturados do projeto..." });
           if (effectiveLinkedProjectId) {
             const factsContext = await fetchProjectFactsContext({
               orgId,
@@ -657,65 +621,33 @@ export async function POST(request: NextRequest) {
               combinedContext += `## Facts Estruturados de Projeto\n${factsContext}\n\n`;
             }
           }
-          const [marketContext, brandContext, projectContext] = await Promise.all([
-            fetchKbContext({
-              query: prompt,
-              orgId,
-              kbDomain: "market",
-              scopeId: "market__br",
-              limit: 6,
-              scoreThreshold: 0.35,
-              filters: {
-                ...(state ? { state } : {}),
-                ...(city ? { city } : {}),
-                ...(neighborhood ? { neighborhood } : {}),
-              },
-            }),
-            fetchKbContext({
-              query: prompt,
-              orgId,
-              kbDomain: "brand",
-              scopeId: "brand__inlevor",
-              limit: 4,
-              scoreThreshold: 0.3,
-            }),
-            effectiveLinkedProjectId
-              ? fetchKbContext({
-                  query: prompt,
-                  orgId,
-                  kbDomain: "project",
-                  scopeId: effectiveLinkedProjectId,
-                  limit: 5,
-                  scoreThreshold: 0.3,
-                  filters: { linkedProjectId: effectiveLinkedProjectId },
-                })
-              : Promise.resolve({ context: "", sources: [] }),
-          ]);
-          qdrantSources = [
-            ...brandContext.sources,
-            ...marketContext.sources,
-            ...projectContext.sources,
-          ];
-          if (brandContext.context) {
-            combinedContext += `## Conhecimento de Marca\n${brandContext.context}\n\n`;
-          }
-          if (marketContext.context) {
-            combinedContext += `## Conhecimento de Mercado\n${marketContext.context}\n\n`;
-          }
-          if (projectContext.context) {
-            combinedContext += `## Conhecimento de Projeto\n${projectContext.context}\n\n`;
-          }
         }
 
-        if (source === "tavily" || source === "both") {
-          send({ type: "status", message: "Pesquisando na internet (Tavily)..." });
-          const { context, sources, warning } = await fetchTavilyContext(prompt);
-          tavilySources = sources;
-          if (warning) send({ type: "warning", message: warning });
-          if (source === "tavily" && !context) {
-            throw new Error(warning || "Tavily não retornou resultados para este prompt.");
-          }
-          if (context) combinedContext += `## Pesquisa Web\n${context}\n\n`;
+        send({ type: "status", message: "Orquestrando retrieve (KB/Web)..." });
+        const orchestrated = await fetchOrchestratedRetrieve({
+          query: prompt,
+          orgId,
+          source,
+          state: state || undefined,
+          city: city || undefined,
+          neighborhood: neighborhood || undefined,
+          linkedProjectId: effectiveLinkedProjectId || undefined,
+        });
+
+        qdrantSources = orchestrated.qdrantSources;
+        tavilySources = orchestrated.tavilySources;
+        retrieveMode = orchestrated.selectedMode;
+        retrieveConfidence = orchestrated.confidence;
+
+        for (const warning of orchestrated.warnings) {
+          send({ type: "warning", message: warning });
+        }
+
+        if (orchestrated.context) {
+          combinedContext += `## Evidências Recuperadas\n${orchestrated.context}\n\n`;
+        }
+        if (source === "tavily" && !orchestrated.context) {
+          throw new Error("Sem evidências web para este prompt.");
         }
 
         // 3b. Build prompts
@@ -745,6 +677,11 @@ export async function POST(request: NextRequest) {
           qdrant: qdrantSources,
           tavily: tavilySources,
         });
+        send({
+          type: "retrieve_meta",
+          mode: retrieveMode,
+          confidence: retrieveConfidence,
+        });
 
         send({ type: "done" });
       } catch (err) {
@@ -767,3 +704,4 @@ export async function POST(request: NextRequest) {
     },
   });
 }
+
