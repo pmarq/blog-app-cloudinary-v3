@@ -159,6 +159,7 @@ type OrchestratedRetrievePayload = {
   };
   confidence?: number;
   evidenceSufficient?: boolean;
+  missingFields?: string[];
   citations?: OrchestratedCitation[];
   warnings?: string[];
 };
@@ -369,6 +370,8 @@ async function fetchOrchestratedRetrieve(params: {
   tavilySources: TavilySource[];
   warnings: string[];
   confidence: number | null;
+  evidenceSufficient: boolean | null;
+  missingFields: string[];
   selectedMode: string;
 }> {
   const body: Record<string, unknown> = {
@@ -448,6 +451,15 @@ async function fetchOrchestratedRetrieve(params: {
     tavilySources,
     warnings,
     confidence: typeof payload?.confidence === "number" ? payload.confidence : null,
+    evidenceSufficient:
+      typeof payload?.evidenceSufficient === "boolean"
+        ? payload.evidenceSufficient
+        : null,
+    missingFields: Array.isArray(payload?.missingFields)
+      ? payload.missingFields
+          .map((item) => String(item || "").trim())
+          .filter(Boolean)
+      : [],
     selectedMode: String(payload?.strategy?.selectedMode ?? "unknown"),
   };
 }
@@ -457,7 +469,8 @@ async function fetchOrchestratedRetrieve(params: {
 async function streamOpenAI(
   systemPrompt: string,
   userMessage: string,
-  onDelta: (text: string) => void
+  onDelta: (text: string) => void,
+  temperature = 0.3,
 ): Promise<void> {
   const apiKey = getOpenAiKey();
 
@@ -470,7 +483,7 @@ async function streamOpenAI(
     body: JSON.stringify({
       model: "gpt-4o",
       stream: true,
-      temperature: 0.7,
+      temperature,
       max_tokens: 4096,
       messages: [
         { role: "system", content: systemPrompt },
@@ -591,6 +604,8 @@ export async function POST(request: NextRequest) {
         let effectiveLinkedProjectId = linkedProjectId;
         let retrieveMode = "unknown";
         let retrieveConfidence: number | null = null;
+        let evidenceSufficient: boolean | null = null;
+        let missingFields: string[] = [];
 
         if (!effectiveLinkedProjectId && (source === "qdrant" || source === "both")) {
           send({ type: "status", message: "Identificando projeto automaticamente..." });
@@ -638,6 +653,8 @@ export async function POST(request: NextRequest) {
         tavilySources = orchestrated.tavilySources;
         retrieveMode = orchestrated.selectedMode;
         retrieveConfidence = orchestrated.confidence;
+        evidenceSufficient = orchestrated.evidenceSufficient;
+        missingFields = orchestrated.missingFields;
 
         for (const warning of orchestrated.warnings) {
           send({ type: "warning", message: warning });
@@ -648,6 +665,30 @@ export async function POST(request: NextRequest) {
         }
         if (source === "tavily" && !orchestrated.context) {
           throw new Error("Sem evidências web para este prompt.");
+        }
+
+        const isFactualFormat = ["faq", "meta_seo", "property_description"].includes(format);
+        if (
+          (source === "qdrant" || source === "both") &&
+          evidenceSufficient === false &&
+          isFactualFormat
+        ) {
+          send({
+            type: "error",
+            message:
+              "Evidência insuficiente para geração confiável. Refine o prompt ou vincule o projeto correto.",
+          });
+          send({
+            type: "retrieve_meta",
+            mode: retrieveMode,
+            confidence: retrieveConfidence,
+            evidenceSufficient,
+            missingFields,
+          });
+          send({
+            type: "done",
+          });
+          return;
         }
 
         // 3b. Build prompts
@@ -667,9 +708,10 @@ export async function POST(request: NextRequest) {
         // 3c. Stream OpenAI response
         send({ type: "status", message: "Gerando conteúdo com IA..." });
 
+        const responseTemperature = isFactualFormat ? 0.2 : 0.5;
         await streamOpenAI(systemPrompt, userMessage, (text) => {
           send({ type: "delta", text });
-        });
+        }, responseTemperature);
 
         // 3d. Send sources metadata
         send({
@@ -681,6 +723,8 @@ export async function POST(request: NextRequest) {
           type: "retrieve_meta",
           mode: retrieveMode,
           confidence: retrieveConfidence,
+          evidenceSufficient,
+          missingFields,
         });
 
         send({ type: "done" });
