@@ -46,7 +46,7 @@ export default function StudioBriefs() {
   const { toast } = useToast();
 
   const getToken = async () => {
-    const token = await auth.currentUser?.getIdToken();
+    const token = await auth.currentUser?.getIdToken(true);
     if (!token) {
       throw new Error("Sessão necessária. Faça login novamente.");
     }

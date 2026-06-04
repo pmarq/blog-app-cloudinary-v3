@@ -64,7 +64,7 @@ export default function StudioKbMarketPage() {
   );
 
   const getToken = async () => {
-    const token = await auth.currentUser?.getIdToken();
+    const token = await auth.currentUser?.getIdToken(true);
     if (!token) throw new Error("Sessao necessaria. Faca login para continuar.");
     return token;
   };

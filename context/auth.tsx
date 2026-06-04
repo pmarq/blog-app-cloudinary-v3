@@ -31,7 +31,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setCurrentUser(user ?? null);
       if (user) {
         try {
-          const tokenResult = await user.getIdTokenResult();
+          const tokenResult = await user.getIdTokenResult(true);
           const token = tokenResult.token;
           const refreshToken = user.refreshToken;
           const claims = tokenResult.claims;
@@ -64,7 +64,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const result = await signInWithPopup(auth, provider);
       console.log("Usuário logado com Google:", result.user);
 
-      const tokenResult = await result.user.getIdTokenResult();
+      const tokenResult = await result.user.getIdTokenResult(true);
       const token = tokenResult.token;
       const refreshToken = result.user.refreshToken;
 
@@ -90,7 +90,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const user = userCredential.user;
       console.log("Usuário logado com email e senha:", user);
 
-      const tokenResult = await user.getIdTokenResult();
+      const tokenResult = await user.getIdTokenResult(true);
       const token = tokenResult.token;
       const refreshToken = user.refreshToken;
 

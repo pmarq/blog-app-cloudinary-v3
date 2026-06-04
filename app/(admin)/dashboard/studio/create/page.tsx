@@ -124,7 +124,7 @@ export default function StudioCreatePage() {
     setShowSources(false);
 
     try {
-      const token = await auth.currentUser?.getIdToken();
+      const token = await auth.currentUser?.getIdToken(true);
       if (!token) throw new Error("Sessão necessária. Faça login para continuar.");
 
       const response = await fetch(withBasePath("/api/studio/ai/generate"), {
