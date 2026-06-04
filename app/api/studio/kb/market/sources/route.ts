@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     }
 
     const url = new URL(request.url);
-    const orgId = normalizeId(url.searchParams.get("orgId") || "inlevor") || "inlevor";
+    const orgId = normalizeId(url.searchParams.get("orgId") || "org_inlevor") || "org_inlevor";
     const state = normalizeId(url.searchParams.get("state"));
     const city = normalizeId(url.searchParams.get("city"));
     const neighborhood = normalizeId(url.searchParams.get("neighborhood"));

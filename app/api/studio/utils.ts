@@ -11,7 +11,7 @@ export const makeRunId = (): string =>
 export const normalizeContext = (
   context?: Partial<StudioContext>
 ): StudioContext => ({
-  orgId: context?.orgId || "inlevor",
+  orgId: context?.orgId || "org_inlevor",
   userId: context?.userId || "anonymous",
   postId: context?.postId,
   briefId: context?.briefId,

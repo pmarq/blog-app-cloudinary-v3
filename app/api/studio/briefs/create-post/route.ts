@@ -1,6 +1,16 @@
 import { NextRequest } from "next/server";
 import { ok, badRequest, readJson, makeRunId } from "../../utils";
 
+const normalizeStudioOrgId = (value: string | null | undefined) => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "org_inlevor";
+  const lowered = trimmed.toLowerCase();
+  if (lowered === "default" || lowered === "inlevor" || lowered === "org-inlevor") {
+    return "org_inlevor";
+  }
+  return trimmed;
+};
+
 interface CreatePostBody {
   briefId?: string;
   orgId?: string;
@@ -21,7 +31,7 @@ export async function POST(request: NextRequest) {
     post: {
       id: postId,
       briefId: body.briefId,
-      orgId: body.orgId || "inlevor",
+      orgId: normalizeStudioOrgId(body.orgId),
       title: body.title || "Post criado a partir do brief",
       meta: body.meta || "",
       tags: body.tags || [],

@@ -19,7 +19,7 @@ type Brief = {
 const mockBriefs: Brief[] = [
   {
     id: "b1",
-    orgId: "inlevor",
+    orgId: "org_inlevor",
     title: "Lançamento Zona Sul",
     status: "draft",
     ownerId: "cmo",
@@ -27,7 +27,7 @@ const mockBriefs: Brief[] = [
   },
   {
     id: "b2",
-    orgId: "inlevor",
+    orgId: "org_inlevor",
     title: "Guia de investimentos 2025",
     status: "in_review",
     ownerId: "cmo",
@@ -35,7 +35,7 @@ const mockBriefs: Brief[] = [
   },
   {
     id: "b3",
-    orgId: "inlevor",
+    orgId: "org_inlevor",
     title: "Stories retrofit",
     status: "approved",
     ownerId: "design",
@@ -43,10 +43,20 @@ const mockBriefs: Brief[] = [
   },
 ];
 
+const normalizeStudioOrgId = (value: string | null | undefined) => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "org_inlevor";
+  const lowered = trimmed.toLowerCase();
+  if (lowered === "default" || lowered === "inlevor" || lowered === "org-inlevor") {
+    return "org_inlevor";
+  }
+  return trimmed;
+};
+
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const limit = parseInt(searchParams.get("limit") || "20", 10);
-  const orgId = searchParams.get("orgId") || "inlevor";
+  const orgId = normalizeStudioOrgId(searchParams.get("orgId"));
 
   const items = mockBriefs.filter((b) => b.orgId === orgId).slice(0, limit);
   return ok({ items, nextPage: null });
@@ -59,7 +69,7 @@ export async function POST(request: NextRequest) {
   const now = new Date().toISOString();
   const brief: Brief = {
     id: `brief-${makeRunId()}`,
-    orgId: body.orgId || "inlevor",
+    orgId: normalizeStudioOrgId(body.orgId),
     title: body.title,
     goals: body.goals,
     target: body.target,

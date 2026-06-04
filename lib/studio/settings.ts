@@ -11,7 +11,17 @@ import type {
 
 const SETTINGS_COLLECTION = "studio_settings";
 const EDITORIAL_DOC_ID = "default_editorial";
-const DEFAULT_ORG_ID = "default";
+const DEFAULT_ORG_ID = "org_inlevor";
+
+function normalizeStudioOrgId(value: string | null | undefined): string {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return DEFAULT_ORG_ID;
+  const lowered = trimmed.toLowerCase();
+  if (lowered === "default" || lowered === "inlevor" || lowered === "org-inlevor") {
+    return DEFAULT_ORG_ID;
+  }
+  return trimmed;
+}
 
 const PILLAR_ORDER: StudioTheme[] = [
   "tokenizacao",
@@ -115,7 +125,7 @@ export async function getEditorialSettings(): Promise<StudioEditorialSettings> {
   return {
     ...data,
     id: data.id || snapshot.id,
-    orgId: data.orgId || DEFAULT_ORG_ID,
+    orgId: normalizeStudioOrgId(data.orgId),
     pillars: normalizePillars(data.pillars || DEFAULT_PILLARS),
     cadence: data.cadence || DEFAULT_CADENCE,
     tone: normalizeTone(data.tone || "premium"),
@@ -138,7 +148,7 @@ export async function saveEditorialSettings(
 
   const settings: StudioEditorialSettings = {
     id: EDITORIAL_DOC_ID,
-    orgId: DEFAULT_ORG_ID,
+    orgId: normalizeStudioOrgId(DEFAULT_ORG_ID),
     pillars: normalizePillars(input.pillars),
     cadence: input.cadence,
     tone: normalizeTone(input.tone),

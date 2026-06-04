@@ -17,7 +17,7 @@ export default function StudioAssetSets() {
         </h1>
         <p className="text-secondary-dark dark:text-secondary-light">
           Agrupar assets por formato (carousel/stories/ads/blog) e aplicar
-          guardrails (mock).
+          guardrails.
         </p>
 
         <div className="mt-4 overflow-hidden rounded border border-secondary-dark/30 dark:border-secondary-light/30">

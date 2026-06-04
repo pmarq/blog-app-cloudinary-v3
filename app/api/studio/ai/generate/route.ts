@@ -575,7 +575,7 @@ export async function POST(request: NextRequest) {
   const language = String(body.language ?? "pt-BR").trim();
   const includeSources = body.includeSources !== false;
   const variations = Math.min(Math.max(Number(body.variations ?? 1), 1), MAX_VARIATIONS);
-  const orgId = normalizeSlug(String(body.orgId ?? "inlevor")) || "inlevor";
+  const orgId = normalizeSlug(String(body.orgId ?? "org_inlevor")) || "org_inlevor";
   const state = normalizeSlug(String(body.state ?? ""));
   const city = normalizeSlug(String(body.city ?? ""));
   const neighborhood = normalizeSlug(String(body.neighborhood ?? ""));

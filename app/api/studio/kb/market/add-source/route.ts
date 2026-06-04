@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     const file = form.get("file");
     const authToken = String(form.get("authToken") || "").trim();
 
-    const orgId = normalizeId(form.get("orgId") || "inlevor") || "inlevor";
+    const orgId = normalizeId(form.get("orgId") || "org_inlevor") || "org_inlevor";
     const state = normalizeId(form.get("state"));
     const city = normalizeId(form.get("city"));
     const neighborhood = normalizeId(form.get("neighborhood"));

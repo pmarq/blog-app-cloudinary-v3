@@ -12,7 +12,7 @@ export default function StudioLanding() {
             Studio
           </h1>
           <p className="text-secondary-dark dark:text-secondary-light">
-            Gere conteúdos de alta qualidade com IA — blog, Instagram, newsletter e muito mais.
+            Gere conteúdos e operações editoriais para o tenant org_inlevor: blog, Instagram, newsletter, agenda e CMO.
           </p>
           <p className="text-xs text-secondary-dark/80 dark:text-secondary-light/80">
             Se a Biblioteca ainda estiver vazia, comece por Mercado (KB) para
@@ -22,38 +22,44 @@ export default function StudioLanding() {
 
         {/* Featured: Criar com IA */}
         <StudioCard
-          title="✦ Criar com IA"
-          description="Interface tipo Gemini: escreva o que quer criar, escolha a fonte (Qdrant / Internet / Combinado) e o formato (Blog, Instagram, Carrossel, Newsletter, SEO e mais). A IA gera em tempo real."
-          href="/dashboard/studio/create"
+          title="CMO"
+          description="Perfil da empresa, portfólio, oportunidades, calendário e estratégia do Marketing Director em um só lugar."
+          href="/dashboard/studio/cmo"
           featured
         />
 
+        <StudioCard
+          title="✦ Criar com IA"
+          description="Interface tipo Gemini: escreva o que quer criar, escolha a fonte (Qdrant / Internet / Combinado) e o formato (Blog, Instagram, Carrossel, Newsletter, SEO e mais). A IA gera em tempo real."
+          href="/dashboard/studio/create"
+        />
+
         <div className="grid gap-4 md:grid-cols-2">
-          <StudioCard
-            title="Conteúdos"
-            description="Crie peças e variações por canal. Use isso como fila de produção antes do calendário."
-            href="/dashboard/studio/briefs"
-          />
+        <StudioCard
+          title="Conteúdos"
+          description="Crie peças e variações por canal. Use isso como fila de produção antes do calendário."
+          href="/dashboard/studio/briefs"
+        />
           <StudioCard
             title="Biblioteca"
             description="Suba materiais (PDFs, referências, templates) e valide a busca. Mercado e projetos ficam separados."
             href="/dashboard/studio/library"
           />
-          <StudioCard
-            title="Calendário"
-            description="Planeje cadência por canal e acompanhe status do que está pronto para publicar."
-            href="/dashboard/studio/agenda"
-          />
-          <StudioCard
-            title="Regras & Voz"
-            description="Defina temas (pilares), tom e regras de conteúdo para manter consistência e evitar erros."
-            href="/dashboard/studio/settings/editorial"
-          />
-          <StudioCard
-            title="Métricas"
-            description="Insights de blog + Instagram com distribution logs."
-            href="/dashboard/studio/metrics"
-          />
+        <StudioCard
+          title="Calendário"
+          description="Planeje cadência por canal e acompanhe o que está pronto para publicar."
+          href="/dashboard/studio/agenda"
+        />
+        <StudioCard
+          title="Regras & Voz"
+          description="Defina temas (pilares), tom e regras de conteúdo para manter consistência e evitar erros."
+          href="/dashboard/studio/settings/editorial"
+        />
+        <StudioCard
+          title="Métricas"
+          description="Painel operacional com posts, jobs e agenda do tenant."
+          href="/dashboard/studio/metrics"
+        />
         </div>
       </div>
     </AdminLayout>

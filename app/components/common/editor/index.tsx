@@ -1,4 +1,4 @@
-// components/editor/index.tsx
+﻿// components/editor/index.tsx
 
 "use client";
 
@@ -741,3 +741,4 @@ export default function Editor({
     </>
   );
 }
+

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const primaryLinks = [
+  { href: "/dashboard/studio/cmo", label: "CMO" },
   { href: "/dashboard/studio/create", label: "✦ Criar com IA" },
   { href: "/dashboard/studio", label: "Início" },
   { href: "/dashboard/studio/library", label: "Biblioteca" },

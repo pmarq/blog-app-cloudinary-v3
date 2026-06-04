@@ -1,10 +1,10 @@
-﻿import { Timestamp } from "firebase-admin/firestore";
+import { Timestamp } from "firebase-admin/firestore";
 
 import { firestore } from "@/firebase/server";
+import { DEFAULT_ORG_ID, normalizeStudioOrgId } from "./org";
 import type { StudioJob, StudioJobStatus, StudioJobType } from "./types";
 
 const JOBS_COLLECTION = "studio_jobs";
-const DEFAULT_ORG_ID = "default";
 
 function stripUndefined<T extends Record<string, unknown>>(data: T): Partial<T> {
   const entries = Object.entries(data).filter(([, value]) => value !== undefined);
@@ -20,13 +20,22 @@ export type CreateJobInput = {
   scheduleItemId?: string;
 };
 
+function normalizeJob(
+  doc: FirebaseFirestore.QueryDocumentSnapshot
+): StudioJob {
+  return {
+    ...(doc.data() as StudioJob),
+    id: doc.id,
+  };
+}
+
 export async function createJob(input: CreateJobInput): Promise<StudioJob> {
   const ref = firestore.collection(JOBS_COLLECTION).doc();
   const now = Timestamp.now();
 
   const job: StudioJob = {
     id: ref.id,
-    orgId: DEFAULT_ORG_ID,
+    orgId: normalizeStudioOrgId(DEFAULT_ORG_ID),
     scheduleItemId: input.scheduleItemId,
     type: input.type,
     status: input.status,
@@ -40,6 +49,20 @@ export async function createJob(input: CreateJobInput): Promise<StudioJob> {
   await ref.set(job);
 
   return job;
+}
+
+export async function listJobs(
+  orgId = DEFAULT_ORG_ID,
+  limit = 50
+): Promise<StudioJob[]> {
+  const snapshot = await firestore.collection(JOBS_COLLECTION).get();
+  const normalizedOrgId = normalizeStudioOrgId(orgId);
+
+  return snapshot.docs
+    .map(normalizeJob)
+    .filter((job) => normalizeStudioOrgId(job.orgId) === normalizedOrgId)
+    .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis())
+    .slice(0, limit);
 }
 
 export async function updateJob(

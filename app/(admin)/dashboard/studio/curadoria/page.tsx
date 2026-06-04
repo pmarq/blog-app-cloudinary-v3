@@ -39,12 +39,12 @@ export default function StudioCuradoria() {
         method: "POST",
         body: formData,
       });
-      if (!res.ok) throw new Error("Falha ao processar PDF (mock).");
+      if (!res.ok) throw new Error("Falha ao processar PDF.");
       const data = await res.json();
       setResult(data);
     } catch (err) {
       console.error(err);
-      setError("Erro ao processar PDF (mock).");
+      setError("Erro ao processar PDF.");
     } finally {
       setBusy(false);
     }
@@ -63,12 +63,12 @@ export default function StudioCuradoria() {
           context: { locale: "pt-BR" },
         }),
       });
-      if (!res.ok) throw new Error("Falha ao checar guardrails (mock).");
+      if (!res.ok) throw new Error("Falha ao checar guardrails.");
       const data: ActionResult = await res.json();
       setIssues(data.issues || []);
     } catch (err) {
       console.error(err);
-      setError("Erro ao checar guardrails (mock).");
+      setError("Erro ao checar guardrails.");
     } finally {
       setGuardrailBusy(false);
     }
@@ -87,12 +87,12 @@ export default function StudioCuradoria() {
           style: "inlevor",
         }),
       });
-      if (!res.ok) throw new Error("Falha ao gerar visual (mock).");
+      if (!res.ok) throw new Error("Falha ao gerar visual.");
       const data: ActionResult = await res.json();
       setVisualActions(data.actions || []);
     } catch (err) {
       console.error(err);
-      setError("Erro ao gerar visual (mock).");
+      setError("Erro ao gerar visual.");
     } finally {
       setVisualBusy(false);
     }
@@ -107,15 +107,15 @@ export default function StudioCuradoria() {
             Curadoria
           </h1>
           <p className="text-secondary-dark dark:text-secondary-light">
-            Ingestão de PDFs/imagens, extração de texto e referências, prompts
-            Visia (mock).
+            Ingestão de PDFs e imagens, extração de texto e referências, e
+            geração de prompts visuais.
           </p>
         </div>
 
         <div className="rounded border border-secondary-dark/30 dark:border-secondary-light/30 p-4 space-y-3 bg-secondary-light/10 dark:bg-secondary-dark/30">
           <div className="flex flex-col gap-2 text-sm">
             <label className="font-semibold text-secondary-dark dark:text-secondary-light">
-              Envie um PDF para extração (mock)
+              Envie um PDF para extração
             </label>
             <input
               type="file"
@@ -135,7 +135,7 @@ export default function StudioCuradoria() {
 
           {result ? (
             <div className="text-sm text-secondary-dark dark:text-secondary-light space-y-2">
-              <div className="font-semibold">Resultado mock</div>
+              <div className="font-semibold">Resultado</div>
               {result.runId ? (
                 <div className="text-[11px] opacity-70">runId: {result.runId}</div>
               ) : null}
@@ -170,14 +170,14 @@ export default function StudioCuradoria() {
                   disabled={guardrailBusy}
                   className="text-xs px-3 py-2 border rounded border-secondary-dark/40 dark:border-secondary-light/40 hover:bg-secondary-light/30 dark:hover:bg-secondary-dark/30 transition disabled:opacity-60"
                 >
-                  {guardrailBusy ? "Checando..." : "Checar guardrails (mock)"}
+                  {guardrailBusy ? "Checando..." : "Checar guardrails"}
                 </button>
                 <button
                   onClick={handleVisual}
                   disabled={visualBusy}
                   className="text-xs px-3 py-2 border rounded border-secondary-dark/40 dark:border-secondary-light/40 hover:bg-secondary-light/30 dark:hover:bg-secondary-dark/30 transition disabled:opacity-60"
                 >
-                  {visualBusy ? "Gerando..." : "Gerar visual (mock)"}
+                  {visualBusy ? "Gerando..." : "Gerar visual"}
                 </button>
               </div>
 
@@ -202,7 +202,7 @@ export default function StudioCuradoria() {
 
               {visualActions.length ? (
                 <div className="rounded border border-secondary-dark/30 dark:border-secondary-light/30 p-2 text-xs space-y-1">
-                  <div className="font-semibold">Prompts/ações visuais (mock)</div>
+                  <div className="font-semibold">Prompts/ações visuais</div>
                   {visualActions.map((act, idx) => (
                     <div
                       key={idx}

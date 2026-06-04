@@ -16,8 +16,7 @@ export default function StudioGuardrails() {
           Guardrails
         </h1>
         <p className="text-secondary-dark dark:text-secondary-light">
-          Regras de paleta/tipografia/ratio/CTA com severidade info/warn/block
-          (mock).
+          Regras de paleta, tipografia, ratio e CTA com severidade info/warn/block.
         </p>
 
         <div className="mt-4 overflow-hidden rounded border border-secondary-dark/30 dark:border-secondary-light/30">

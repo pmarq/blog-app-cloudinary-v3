@@ -132,6 +132,10 @@ export async function createPost(
       meta: postData.meta,
       content: postData.content,
       tags: postData.tags || [],
+      briefId: postData.briefId,
+      orgId: postData.orgId,
+      channel: postData.channel,
+      status: postData.status,
       thumbnail: thumbnailUrl
         ? { url: thumbnailUrl, public_id: thumbnailPublicId }
         : null,

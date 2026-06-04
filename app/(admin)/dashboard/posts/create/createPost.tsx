@@ -10,7 +10,11 @@ import { useToast } from "@/hooks/use-toast";
 import { createPost } from "../action";
 import type { PostInput } from "@/app/utils/types";
 
-export default function CreatePost() {
+type CreatePostProps = {
+  initialDraft?: Partial<FinalPost>;
+};
+
+export default function CreatePost({ initialDraft }: CreatePostProps) {
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const router = useRouter();
@@ -55,6 +59,8 @@ export default function CreatePost() {
         categoryId: post.categoryId || "",
         thumbnail: cleanedThumbnail,
         authorId: userId,
+        briefId: post.briefId || undefined,
+        orgId: "org_inlevor",
       };
 
       const response = await createPost(postData, userId);
@@ -89,7 +95,27 @@ export default function CreatePost() {
   return (
     <div className="max-w-4xl mx-auto p-4">
       {errorMessage && <p className="text-red-500">{errorMessage}</p>}
-      <EditorComponent onSubmit={handleOnSubmit} busy={busy} />
+      <EditorComponent
+        onSubmit={handleOnSubmit}
+        busy={busy}
+        initialValue={
+          initialDraft
+            ? ({
+                title: initialDraft.title || "",
+                content: initialDraft.content || "",
+                meta: initialDraft.meta || "",
+                slug: initialDraft.slug || "",
+                tags: Array.isArray(initialDraft.tags)
+                  ? initialDraft.tags.join(", ")
+                  : initialDraft.tags || "",
+                categoryId: initialDraft.categoryId || "",
+                briefId: initialDraft.briefId,
+                origin: initialDraft.origin,
+              } as FinalPost)
+            : undefined
+        }
+        briefId={initialDraft?.briefId}
+      />
     </div>
   );
 }
