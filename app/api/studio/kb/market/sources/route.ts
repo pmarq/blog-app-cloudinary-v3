@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/firebase/server";
 import { buildKbCoreHeaders, getKbCoreUrl } from "@/lib/studio/kb-core";
+import { DEFAULT_ORG_ID } from "@/lib/studio/org";
 
 export const runtime = "nodejs";
 
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
     }
 
     const url = new URL(request.url);
-    const orgId = normalizeId(url.searchParams.get("orgId") || "org_inlevor") || "org_inlevor";
+    const orgId = normalizeId(url.searchParams.get("orgId") || DEFAULT_ORG_ID) || DEFAULT_ORG_ID;
     const state = normalizeId(url.searchParams.get("state"));
     const city = normalizeId(url.searchParams.get("city"));
     const neighborhood = normalizeId(url.searchParams.get("neighborhood"));

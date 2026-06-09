@@ -104,10 +104,11 @@ export async function createItem(
 ): Promise<StudioScheduleItem> {
   const ref = firestore.collection(SCHEDULE_COLLECTION).doc();
   const now = Timestamp.now();
+  const orgId = normalizeStudioOrgId(input.orgId || DEFAULT_ORG_ID);
 
   const newItem: StudioScheduleItem = {
     id: ref.id,
-    orgId: normalizeStudioOrgId(DEFAULT_ORG_ID),
+    orgId,
     title: input.title,
     theme: input.theme,
     channel: input.channel,
@@ -144,12 +145,13 @@ export async function updateItem(
 }
 
 export async function enqueueGenerateDraftJob(
-  scheduleItemId: string
+  scheduleItemId: string,
+  orgId = DEFAULT_ORG_ID
 ): Promise<StudioJob> {
   const ref = firestore.collection(JOBS_COLLECTION).doc();
   const job: StudioJob = {
     id: ref.id,
-    orgId: normalizeStudioOrgId(DEFAULT_ORG_ID),
+    orgId: normalizeStudioOrgId(orgId),
     scheduleItemId,
     type: "generate_draft",
     status: "queued",

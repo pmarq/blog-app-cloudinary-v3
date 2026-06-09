@@ -3,9 +3,8 @@ export const dynamic = "force-dynamic";
 import AdminLayout from "@/app/components/layout/AdminLayout";
 import StudioNav from "@/app/components/admin/StudioNav";
 import { listJobs } from "@/lib/studio/jobs";
+import { DEFAULT_ORG_ID } from "@/lib/studio/org";
 import type { StudioJob } from "@/lib/studio/types";
-
-const DEFAULT_ORG_ID = "org_inlevor";
 
 function formatDateTime(value: Date | string | null | undefined): string {
   if (!value) {

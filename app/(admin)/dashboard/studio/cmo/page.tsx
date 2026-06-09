@@ -7,6 +7,7 @@ import StudioNav from "@/app/components/admin/StudioNav";
 import { auth } from "@/firebase/client";
 import { useToast } from "@/hooks/use-toast";
 import { withBasePath } from "@/lib/withBasePath";
+import { DEFAULT_ORG_ID } from "@/lib/studio/org";
 
 type CompanyProfile = {
   id?: string;
@@ -117,8 +118,6 @@ type BriefItem = {
   scheduledAt?: string | null;
   status?: string;
 };
-
-const DEFAULT_ORG_ID = "org_inlevor";
 
 const emptyProfile: CompanyProfile = {
   name: "",

@@ -1,6 +1,7 @@
 import AdminLayout from "@/app/components/layout/AdminLayout";
 import Link from "next/link";
 import StudioNav from "@/app/components/admin/StudioNav";
+import { DEFAULT_ORG_ID } from "@/lib/studio/org";
 
 export default function StudioLanding() {
   return (
@@ -12,7 +13,7 @@ export default function StudioLanding() {
             Studio
           </h1>
           <p className="text-secondary-dark dark:text-secondary-light">
-            Gere conteúdos e operações editoriais para o tenant org_inlevor: blog, Instagram, newsletter, agenda e CMO.
+            Gere conteúdos e operações editoriais para o tenant {DEFAULT_ORG_ID}: blog, Instagram, newsletter, agenda e CMO.
           </p>
           <p className="text-xs text-secondary-dark/80 dark:text-secondary-light/80">
             Se a Biblioteca ainda estiver vazia, comece por Mercado (KB) para

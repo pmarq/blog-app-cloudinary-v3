@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/auth";
 import { useToast } from "@/hooks/use-toast";
 import { createPost } from "../action";
+import { DEFAULT_ORG_ID } from "@/lib/studio/org";
 import type { PostInput } from "@/app/utils/types";
 
 type CreatePostProps = {
@@ -60,7 +61,7 @@ export default function CreatePost({ initialDraft }: CreatePostProps) {
         thumbnail: cleanedThumbnail,
         authorId: userId,
         briefId: post.briefId || undefined,
-        orgId: "org_inlevor",
+        orgId: DEFAULT_ORG_ID,
       };
 
       const response = await createPost(postData, userId);

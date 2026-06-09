@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ActionResult, StudioContext } from "@/app/models/Studio";
+import { DEFAULT_ORG_ID } from "@/lib/studio/org";
 
 export const schemaVersion: ActionResult["schemaVersion"] = "1.0";
 
@@ -11,7 +12,7 @@ export const makeRunId = (): string =>
 export const normalizeContext = (
   context?: Partial<StudioContext>
 ): StudioContext => ({
-  orgId: context?.orgId || "org_inlevor",
+  orgId: context?.orgId || DEFAULT_ORG_ID,
   userId: context?.userId || "anonymous",
   postId: context?.postId,
   briefId: context?.briefId,

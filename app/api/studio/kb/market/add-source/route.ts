@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, blogStorage } from "@/firebase/server";
 import { buildKbCoreHeaders, getKbCoreUrl } from "@/lib/studio/kb-core";
+import { DEFAULT_ORG_ID } from "@/lib/studio/org";
 
 export const runtime = "nodejs";
 
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
     const file = form.get("file");
     const authToken = String(form.get("authToken") || "").trim();
 
-    const orgId = normalizeId(form.get("orgId") || "org_inlevor") || "org_inlevor";
+    const orgId = normalizeId(form.get("orgId") || DEFAULT_ORG_ID) || DEFAULT_ORG_ID;
     const state = normalizeId(form.get("state"));
     const city = normalizeId(form.get("city"));
     const neighborhood = normalizeId(form.get("neighborhood"));

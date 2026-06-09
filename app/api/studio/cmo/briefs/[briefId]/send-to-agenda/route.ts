@@ -1,7 +1,8 @@
-﻿import { Timestamp } from "firebase-admin/firestore";
+import { Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createItem, serializeScheduleItem } from "@/lib/studio/schedule";
+import { DEFAULT_ORG_ID, normalizeStudioOrgId } from "@/lib/studio/org";
 import type { StudioChannel, StudioTheme } from "@/lib/studio/types";
 import {
   getCoreBaseUrl,
@@ -42,6 +43,7 @@ export async function POST(
 
   const brief = typeof body?.brief === "object" && body.brief !== null ? body.brief : body;
   const title = String(brief?.title || "").trim();
+  const orgId = normalizeStudioOrgId(brief?.orgId || body?.orgId || DEFAULT_ORG_ID);
   const channel = resolveChannel(brief?.channel);
   const theme = resolveTheme(brief?.theme || brief?.scope || title);
   const scheduledCandidate = brief?.scheduledAt ? new Date(brief.scheduledAt) : null;
@@ -84,6 +86,7 @@ export async function POST(
     }
 
     const scheduleItem = await createItem({
+      orgId,
       title,
       theme,
       channel,
@@ -104,4 +107,3 @@ export async function POST(
     return NextResponse.json({ ok: false, message }, { status: 500 });
   }
 }
-

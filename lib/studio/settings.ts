@@ -1,6 +1,7 @@
 ﻿import { Timestamp } from "firebase-admin/firestore";
 
 import { firestore } from "@/firebase/server";
+import { DEFAULT_ORG_ID } from "./org";
 import type {
   StudioCadence,
   StudioEditorialSettings,
@@ -11,8 +12,6 @@ import type {
 
 const SETTINGS_COLLECTION = "studio_settings";
 const EDITORIAL_DOC_ID = "default_editorial";
-const DEFAULT_ORG_ID = "org_inlevor";
-
 function normalizeStudioOrgId(value: string | null | undefined): string {
   const trimmed = String(value || "").trim();
   if (!trimmed) return DEFAULT_ORG_ID;

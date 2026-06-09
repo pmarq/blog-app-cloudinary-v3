@@ -1,4 +1,4 @@
-﻿import type { Timestamp } from "firebase-admin/firestore";
+import type { Timestamp } from "firebase-admin/firestore";
 
 export type StudioTheme =
   | "tokenizacao"
@@ -49,6 +49,7 @@ export type StudioScheduleItemInput = {
   theme: StudioTheme;
   channel: StudioChannel;
   status: StudioStatus;
+  orgId?: string;
   scheduledAt?: Timestamp | null;
   guardrailScore?: number | null;
 };

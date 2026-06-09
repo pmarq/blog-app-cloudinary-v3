@@ -9,6 +9,7 @@ import {
   type TavilySource,
 } from "@/lib/studio/generate-shared";
 import { buildKbCoreHeaders, getKbCoreUrl } from "@/lib/studio/kb-core";
+import { DEFAULT_ORG_ID } from "@/lib/studio/org";
 
 export const runtime = "nodejs";
 
@@ -575,7 +576,7 @@ export async function POST(request: NextRequest) {
   const language = String(body.language ?? "pt-BR").trim();
   const includeSources = body.includeSources !== false;
   const variations = Math.min(Math.max(Number(body.variations ?? 1), 1), MAX_VARIATIONS);
-  const orgId = normalizeSlug(String(body.orgId ?? "org_inlevor")) || "org_inlevor";
+  const orgId = normalizeSlug(String(body.orgId ?? DEFAULT_ORG_ID)) || DEFAULT_ORG_ID;
   const state = normalizeSlug(String(body.state ?? ""));
   const city = normalizeSlug(String(body.city ?? ""));
   const neighborhood = normalizeSlug(String(body.neighborhood ?? ""));

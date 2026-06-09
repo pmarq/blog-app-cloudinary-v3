@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { auth } from "@/firebase/client";
 import { useToast } from "@/hooks/use-toast";
 import { withBasePath } from "@/lib/withBasePath";
+import { DEFAULT_ORG_ID } from "@/lib/studio/org";
 
 type Brief = {
   id: string;
@@ -28,8 +29,6 @@ type Brief = {
   cta?: string;
   scheduledAt?: string | null;
 };
-
-const DEFAULT_ORG_ID = "org_inlevor";
 
 export default function StudioBriefs() {
   const [briefs, setBriefs] = useState<Brief[]>([]);
