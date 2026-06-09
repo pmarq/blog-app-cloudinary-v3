@@ -31,11 +31,6 @@ type Brief = {
 
 const DEFAULT_ORG_ID = "org_inlevor";
 
-function toStringValue(value: string | string[] | undefined): string {
-  if (Array.isArray(value)) return value[0] || "";
-  return value || "";
-}
-
 export default function StudioBriefs() {
   const [briefs, setBriefs] = useState<Brief[]>([]);
   const [loading, setLoading] = useState(false);
@@ -68,7 +63,7 @@ export default function StudioBriefs() {
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.message || "Falha ao carregar briefs.");
       }
-      setBriefs(Array.isArray(payload.items) ? payload.items : []);
+      setBriefs(Array.isArray(payload.latestItems) ? payload.latestItems : []);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Falha ao carregar briefs.";
       console.error(err);

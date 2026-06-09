@@ -1,5 +1,5 @@
-import { NextRequest } from "next/server";
-import { forwardJson, requireAdmin } from "../_shared";
+import { NextRequest, NextResponse } from "next/server";
+import { forwardJson, requireAdmin, withLatestItemsPayload } from "../_shared";
 
 export async function GET(request: NextRequest) {
   const unauthorized = await requireAdmin(request);
@@ -7,7 +7,9 @@ export async function GET(request: NextRequest) {
 
   const url = new URL(request.url);
   const search = url.searchParams.toString();
-  return forwardJson(request, `/studio/cmo/strategies${search ? `?${search}` : ""}`, {
+  const response = await forwardJson(request, `/studio/cmo/strategies${search ? `?${search}` : ""}`, {
     method: "GET",
   });
+  const payload = await response.json().catch(() => ({}));
+  return NextResponse.json(withLatestItemsPayload(payload), { status: response.status });
 }

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { forwardJson, requireAdmin } from "../../_shared";
+import { dedupeBriefPayload, forwardJson, requireAdmin } from "../../_shared";
 
 export const runtime = "nodejs";
 
@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   if (unauthorized) return unauthorized;
 
   const body = await request.text();
-  return forwardJson(request, "/studio/cmo/briefs/generate", {
+  const response = await forwardJson(request, "/studio/cmo/briefs/generate", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -16,4 +16,6 @@ export async function POST(request: NextRequest) {
     },
     body,
   });
+  const payload = await response.json().catch(() => ({}));
+  return Response.json(dedupeBriefPayload(payload), { status: response.status });
 }

@@ -151,6 +151,162 @@ function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+function formatBackendError(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "";
+
+  const record = payload as Record<string, unknown>;
+  const parts = [
+    record.message,
+    record.error,
+    record.details,
+    record.link,
+    record.url,
+  ]
+    .flatMap((value) => {
+      if (!value) return [];
+      if (Array.isArray(value)) return value.map((item) => String(item));
+      return [String(value)];
+    })
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return parts.join("\n");
+}
+
+function hasText(value: string | undefined | null): boolean {
+  return Boolean(String(value || "").trim());
+}
+
+function hasItems(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0;
+}
+
+function getBriefSignature(brief: BriefItem): string {
+  return [
+    brief.id || "",
+    brief.briefRunId || "",
+    brief.strategyId || "",
+    brief.calendarRunId || "",
+    brief.title || "",
+    brief.period || "",
+    brief.channel || "",
+    brief.objective || "",
+  ]
+    .map((part) => String(part || "").trim().toLowerCase())
+    .join("|");
+}
+
+function dedupeBriefItems(items: BriefItem[]): BriefItem[] {
+  const byRunId = new Map<string, BriefItem>();
+  const bySignature = new Map<string, BriefItem>();
+
+  for (const item of items) {
+    const runId = String(item.briefRunId || "").trim().toLowerCase();
+    const signature = getBriefSignature(item);
+
+    if (runId) {
+      if (byRunId.has(runId)) byRunId.delete(runId);
+      byRunId.set(runId, item);
+      continue;
+    }
+
+    if (!bySignature.has(signature)) {
+      bySignature.set(signature, item);
+    }
+  }
+
+  return [...byRunId.values(), ...bySignature.values()];
+}
+
+type CmoStage = "profile" | "portfolio" | "opportunities" | "strategy" | "calendar" | "briefs" | "ready";
+
+function getCmoStage({
+  companyProfile,
+  portfolioSnapshot,
+  opportunitySearch,
+  strategy,
+  calendarItems,
+  briefItems,
+}: {
+  companyProfile: CompanyProfile;
+  portfolioSnapshot: PortfolioSnapshot | null;
+  opportunitySearch: MarketOpportunityPayload | null;
+  strategy: StrategyPayload | null;
+  calendarItems: CalendarItem[];
+  briefItems: BriefItem[];
+}): CmoStage {
+  const profileReady =
+    hasText(companyProfile.name) ||
+    hasText(companyProfile.positioning) ||
+    hasText(companyProfile.valueProposition) ||
+    hasItems(companyProfile.audience) ||
+    hasItems(companyProfile.regions);
+
+  if (!profileReady) return "profile";
+  if (!portfolioSnapshot?.id) return "portfolio";
+  if (!opportunitySearch?.id && !hasItems(opportunitySearch?.opportunities)) return "opportunities";
+  if (!strategy?.id) return "strategy";
+  if (!hasItems(calendarItems)) return "calendar";
+  if (!hasItems(briefItems)) return "briefs";
+  return "ready";
+}
+
+function getStageConfig(stage: CmoStage) {
+  const config: Record<CmoStage, { eyebrow: string; title: string; description: string; actionLabel: string; hint: string }> = {
+    profile: {
+      eyebrow: "Comece aqui",
+      title: "Preencha o Company Profile",
+      description: "Defina posicionamento, publico, regioes e guardrails antes de pedir qualquer geracao.",
+      actionLabel: "Salvar perfil",
+      hint: "Sem isso, o sistema nao sabe para quem falar.",
+    },
+    portfolio: {
+      eyebrow: "Proximo passo",
+      title: "Leia o portfolio atual",
+      description: "O sistema precisa entender quais produtos existem e o que eles comunicam para montar o plano.",
+      actionLabel: "Analisar portfolio",
+      hint: "Isso cria o diagnostico base do mes.",
+    },
+    opportunities: {
+      eyebrow: "Agora sim",
+      title: "Busque oportunidades de mercado",
+      description: "Cruze portfolio, perfil e web para descobrir temas com aderencia comercial e editorial.",
+      actionLabel: "Buscar oportunidades",
+      hint: "Aqui surgem temas com valor real.",
+    },
+    strategy: {
+      eyebrow: "Decisao",
+      title: "Gere o Plano CMO do mes",
+      description: "Transforme o diagnostico em prioridades, canais, riscos e direcoes editoriais.",
+      actionLabel: "Gerar plano",
+      hint: "Essa e a sintese estrategica do sistema.",
+    },
+    calendar: {
+      eyebrow: "Operacao",
+      title: "Monte o calendario editorial",
+      description: "Converta a estrategia em pautas com datas, canais e temas definidos.",
+      actionLabel: "Gerar calendario",
+      hint: "Sem calendario, nao existe execucao previsivel.",
+    },
+    briefs: {
+      eyebrow: "Producao",
+      title: "Crie briefs para execucao",
+      description: "Cada pauta vira um brief claro para orientar texto, tom, CTA e guardrails.",
+      actionLabel: "Gerar briefs",
+      hint: "Brief bom reduz retrabalho na producao.",
+    },
+    ready: {
+      eyebrow: "Fim do fluxo",
+      title: "Abra a area de briefs",
+      description: "Voce ja saiu do diagnostico e chegou na etapa de revisao e distribuicao dos briefs.",
+      actionLabel: "Abrir briefs",
+      hint: "Agora a proxima tela e a de revisao editorial.",
+    },
+  };
+
+  return config[stage];
+}
+
 export default function StudioCmoPage() {
   const { toast } = useToast();
   const router = useRouter();
@@ -165,6 +321,7 @@ export default function StudioCmoPage() {
   const [generatingBriefs, setGeneratingBriefs] = useState(false);
   const [updatingBriefId, setUpdatingBriefId] = useState<string | null>(null);
   const [sendingBriefId, setSendingBriefId] = useState<string | null>(null);
+  const [briefsError, setBriefsError] = useState<string | null>(null);
 
   const [portfolioSnapshots, setPortfolioSnapshots] = useState<PortfolioSnapshot[]>([]);
   const [marketOpportunityDrafts, setMarketOpportunityDrafts] = useState<MarketOpportunityPayload[]>(
@@ -198,6 +355,51 @@ export default function StudioCmoPage() {
     }),
     [companyProfile],
   );
+
+  const cmoStage = useMemo(
+    () =>
+      getCmoStage({
+        companyProfile,
+        portfolioSnapshot,
+        opportunitySearch,
+        strategy,
+        calendarItems,
+        briefItems,
+      }),
+    [briefItems, calendarItems, companyProfile, opportunitySearch, portfolioSnapshot, strategy],
+  );
+
+  const stageConfig = useMemo(() => getStageConfig(cmoStage), [cmoStage]);
+  const uniqueBriefItems = useMemo(() => dedupeBriefItems(briefItems), [briefItems]);
+
+  const executeNextStep = async () => {
+    if (cmoStage === "profile") {
+      await saveProfile();
+      return;
+    }
+    if (cmoStage === "portfolio") {
+      await analyzePortfolio();
+      return;
+    }
+    if (cmoStage === "opportunities") {
+      await searchOpportunities();
+      return;
+    }
+    if (cmoStage === "strategy") {
+      await generateStrategy();
+      return;
+    }
+    if (cmoStage === "calendar") {
+      await generateCalendar();
+      return;
+    }
+    if (cmoStage === "briefs") {
+      await generateBriefs();
+      return;
+    }
+
+    router.push("/dashboard/studio/briefs");
+  };
 
   const getToken = async () => {
     const token = await auth.currentUser?.getIdToken(true);
@@ -267,13 +469,21 @@ export default function StudioCmoPage() {
         throw new Error(briefsPayload?.message || "Falha ao carregar briefs.");
       }
 
-      const nextPortfolioSnapshots = Array.isArray(portfolioPayload.items) ? portfolioPayload.items : [];
-      const nextOpportunityDrafts = Array.isArray(opportunitiesPayload.items)
-        ? opportunitiesPayload.items
+      const nextPortfolioSnapshots = Array.isArray(portfolioPayload.latestItems)
+        ? portfolioPayload.latestItems
         : [];
-      const nextStrategyDrafts = Array.isArray(strategiesPayload.items) ? strategiesPayload.items : [];
-      const nextCalendarItems = Array.isArray(calendarPayload.items) ? calendarPayload.items : [];
-      const nextBriefItems = Array.isArray(briefsPayload.items) ? briefsPayload.items : [];
+      const nextOpportunityDrafts = Array.isArray(opportunitiesPayload.latestItems)
+        ? opportunitiesPayload.latestItems
+        : [];
+      const nextStrategyDrafts = Array.isArray(strategiesPayload.latestItems)
+        ? strategiesPayload.latestItems
+        : [];
+      const nextCalendarItems = Array.isArray(calendarPayload.latestItems)
+        ? calendarPayload.latestItems
+        : [];
+      const nextBriefItems = dedupeBriefItems(
+        Array.isArray(briefsPayload.latestItems) ? briefsPayload.latestItems : [],
+      );
 
       setPortfolioSnapshots(nextPortfolioSnapshots);
       setMarketOpportunityDrafts(nextOpportunityDrafts);
@@ -422,7 +632,7 @@ export default function StudioCmoPage() {
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.message || "Falha ao analisar portfólio.");
       }
-      setPortfolioSnapshot(payload.portfolioSnapshot || null);
+      setPortfolioSnapshot(payload.latestPortfolioSnapshot || null);
       await refreshDrafts();
       toast({ title: "Portfólio analisado", description: "Snapshot atualizado." });
     } catch (error) {
@@ -452,7 +662,7 @@ export default function StudioCmoPage() {
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.message || "Falha ao buscar oportunidades.");
       }
-      setOpportunitySearch(payload.opportunitySearch || null);
+      setOpportunitySearch(payload.latestOpportunitySearch || null);
       await refreshDrafts();
       toast({ title: "Oportunidades atualizadas", description: "Radar de mercado pronto." });
     } catch (error) {
@@ -485,7 +695,7 @@ export default function StudioCmoPage() {
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.message || "Falha ao gerar estratégia.");
       }
-      setStrategy(payload.strategy || null);
+      setStrategy(payload.latestStrategy || null);
       await refreshDrafts();
       toast({ title: "Estratégia gerada", description: "Plano CMO salvo no backend." });
     } catch (error) {
@@ -517,7 +727,11 @@ export default function StudioCmoPage() {
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.message || "Falha ao gerar calendário.");
       }
-      setCalendarItems(Array.isArray(payload.calendar?.items) ? payload.calendar.items : []);
+      setCalendarItems(
+        Array.isArray(payload.latestCalendar?.items)
+          ? payload.latestCalendar.items
+          : [],
+      );
       await refreshDrafts();
       toast({ title: "Calendário gerado", description: "Pautas editoriais salvas no backend." });
     } catch (error) {
@@ -530,6 +744,7 @@ export default function StudioCmoPage() {
 
   const generateBriefs = async () => {
     setGeneratingBriefs(true);
+    setBriefsError(null);
     try {
       const token = await getToken();
       const response = await fetch(withBasePath("/api/studio/cmo/briefs/generate"), {
@@ -547,13 +762,22 @@ export default function StudioCmoPage() {
       });
       const payload = await response.json();
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.message || "Falha ao gerar briefs.");
+        const backendError = formatBackendError(payload);
+        throw new Error(
+          backendError ||
+            (payload?.message as string | undefined) ||
+            (payload?.error as string | undefined) ||
+            "Falha ao gerar briefs.",
+        );
       }
-      setBriefItems(Array.isArray(payload.briefs?.items) ? payload.briefs.items : []);
+      setBriefItems(
+        Array.isArray(payload.latestItems) ? payload.latestItems : [],
+      );
       await refreshDrafts();
       toast({ title: "Briefs gerados", description: "Direcionamentos editoriais salvos no backend." });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro ao gerar briefs.";
+      setBriefsError(message);
       toast({ title: "Erro", description: message, variant: "destructive" });
     } finally {
       setGeneratingBriefs(false);
@@ -668,6 +892,48 @@ export default function StudioCmoPage() {
           </p>
         </div>
 
+        <section className="rounded border border-highlight-light/30 bg-highlight-light/5 p-4 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                {stageConfig.eyebrow}
+              </div>
+              <h2 className="text-xl font-semibold text-secondary-dark dark:text-secondary-light">
+                {stageConfig.title}
+              </h2>
+              <p className="max-w-3xl text-sm text-secondary-dark/80 dark:text-secondary-light/80">
+                {stageConfig.description}
+              </p>
+            </div>
+
+            <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/50 dark:bg-black/10 px-3 py-2 text-xs text-secondary-dark dark:text-secondary-light">
+              <div className="font-semibold">{cmoStage.toUpperCase()}</div>
+              <div>{stageConfig.hint}</div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void executeNextStep()}
+              disabled={
+                (cmoStage === "profile" && savingProfile) ||
+                (cmoStage === "portfolio" && analyzingPortfolio) ||
+                (cmoStage === "opportunities" && searchingOpportunities) ||
+                (cmoStage === "strategy" && generatingStrategy) ||
+                (cmoStage === "calendar" && generatingCalendar) ||
+                (cmoStage === "briefs" && generatingBriefs)
+              }
+              className="rounded bg-highlight-light px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+            >
+              {stageConfig.actionLabel}
+            </button>
+            <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+              O sistema deve sugerir a proxima acao, nao todas ao mesmo tempo.
+            </div>
+          </div>
+        </section>
+
         <section className="grid gap-4 lg:grid-cols-2">
           <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-secondary-light/10 dark:bg-secondary-dark/20 p-4 space-y-4">
             <div className="flex items-center justify-between gap-3">
@@ -766,40 +1032,86 @@ export default function StudioCmoPage() {
                 {generatingBriefs ? "Gerando..." : "Gerar briefs"}
               </button>
             </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3 space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                  Estado
+                </div>
+                <div className="text-sm text-secondary-dark dark:text-secondary-light">
+                  {briefItems.length
+                    ? `${briefItems.length} briefs prontos para revisao`
+                    : "Ainda nao ha briefs. Gere a agenda primeiro."}
+                </div>
+              </div>
+              <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3 space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                  Proxima acao
+                </div>
+                <div className="text-sm text-secondary-dark dark:text-secondary-light">
+                  {strategy?.id
+                    ? "Gerar calendario e briefs a partir da estrategia."
+                    : "Gerar o plano CMO antes de seguir."}
+                </div>
+              </div>
+              <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3 space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                  Revisao
+                </div>
+                <div className="text-sm text-secondary-dark dark:text-secondary-light">
+                  Depois disso, o usuario abre o editor e valida o conteudo final.
+                </div>
+              </div>
+            </div>
 
-            <ReadOnlyJson title="Portfolio Snapshot" value={portfolioSnapshot} />
-            <ReadOnlyJson title="Oportunidades" value={opportunitySearch} />
-            <ReadOnlyJson title="Estratégia" value={strategy} />
-            <ReadOnlyJson title="Snapshots recentes" value={portfolioSnapshots} />
-            <ReadOnlyJson title="Oportunidades recentes" value={marketOpportunityDrafts} />
-            <ReadOnlyJson title="Estratégias recentes" value={strategyDrafts} />
-            <ReadOnlyJson title="Calendário editorial" value={calendarItems} />
-            <ReadOnlyJson title="Briefs editoriais" value={briefItems} />
+            <details className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-highlight-light dark:text-highlight-dark">
+                Dados tecnicos
+              </summary>
+              <div className="mt-3 grid gap-3">
+                <ReadOnlyJson title="Portfolio Snapshot" value={portfolioSnapshot} />
+                <ReadOnlyJson title="Oportunidades" value={opportunitySearch} />
+                <ReadOnlyJson title="Estrategia" value={strategy} />
+                <ReadOnlyJson title="Snapshots recentes" value={portfolioSnapshots} />
+                <ReadOnlyJson title="Oportunidades recentes" value={marketOpportunityDrafts} />
+                <ReadOnlyJson title="Estrategias recentes" value={strategyDrafts} />
+                <ReadOnlyJson title="Calendario editorial" value={calendarItems} />
+                <ReadOnlyJson title="Briefs editoriais" value={briefItems} />
+              </div>
+            </details>
 
             <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-highlight-light dark:text-highlight-dark">
-                  Ações de briefs
+                  Briefs em revisao
                 </div>
                 <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                  Aprovar e enviar para a agenda
+                  Aprovar, enviar para a agenda e abrir no editor
                 </div>
               </div>
+              {briefsError ? (
+                <div className="rounded border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-700 dark:text-red-300">
+                  <div className="font-semibold">Erro ao gerar briefs</div>
+                  <pre className="mt-2 whitespace-pre-wrap break-words">{briefsError}</pre>
+                </div>
+              ) : null}
               <div className="space-y-2">
-                {briefItems.length ? (
-                  briefItems.map((brief) => (
+                {uniqueBriefItems.length ? (
+                  uniqueBriefItems.map((brief, index) => (
                     <div
-                      key={brief.id || `${brief.title}-${brief.period}`}
+                      key={brief.id || `${brief.briefRunId || "brief"}-${brief.title || "untitled"}-${brief.period || "no-period"}-${index}`}
                       className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 p-3 space-y-2"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div>
+                        <div className="space-y-1">
                           <div className="font-medium text-secondary-dark dark:text-secondary-light">
-                            {brief.title || "Brief sem título"}
+                            {brief.title || "Brief sem titulo"}
                           </div>
                           <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                            {brief.channel || "blog"} • {brief.status || "draft"} •{" "}
+                            {brief.channel || "blog"} - {brief.status || "draft"} -{" "}
                             {brief.scheduledAt || "sem data"}
+                          </div>
+                          <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                            {brief.objective || "Sem objetivo definido."}
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -817,32 +1129,15 @@ export default function StudioCmoPage() {
                             disabled={sendingBriefId === brief.id}
                             className="rounded border border-highlight-light px-3 py-1 text-xs font-semibold text-highlight-light transition hover:bg-secondary-light/20 disabled:opacity-60"
                           >
-                            {sendingBriefId === brief.id ? "Enviando..." : "Enviar para agenda"}
+                            {sendingBriefId === brief.id ? "Enviando..." : "Enviar"}
                           </button>
                           <button
                             type="button"
                             onClick={() => openBriefInEditor(brief)}
                             className="rounded border border-secondary-dark/30 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/30"
                           >
-                            Abrir no editor
+                            Editor
                           </button>
-                        </div>
-                      </div>
-                      <div className="grid gap-2 text-xs text-secondary-dark dark:text-secondary-light md:grid-cols-2">
-                        <div>
-                          <span className="font-semibold">Tema:</span> {brief.theme || "—"}
-                        </div>
-                        <div>
-                          <span className="font-semibold">Alvo:</span>{" "}
-                          {Array.isArray(brief.audience) && brief.audience.length
-                            ? brief.audience.slice(0, 2).join(", ")
-                            : "—"}
-                        </div>
-                        <div>
-                          <span className="font-semibold">Objetivo:</span> {brief.objective || "—"}
-                        </div>
-                        <div>
-                          <span className="font-semibold">CTA:</span> {brief.cta || "—"}
                         </div>
                       </div>
                     </div>

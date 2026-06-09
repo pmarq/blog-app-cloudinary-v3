@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { forwardJson, requireAdmin } from "../../_shared";
 
 export const runtime = "nodejs";
@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   if (unauthorized) return unauthorized;
 
   const body = await request.text();
-  return forwardJson(request, "/studio/cmo/opportunities/search", {
+  const response = await forwardJson(request, "/studio/cmo/opportunities/search", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -16,4 +16,13 @@ export async function POST(request: NextRequest) {
     },
     body,
   });
+  const payload = await response.json().catch(() => ({}));
+  const nextPayload =
+    payload && typeof payload === "object"
+      ? {
+          ...(payload as Record<string, unknown>),
+          latestOpportunitySearch: (payload as Record<string, unknown>).opportunitySearch || null,
+        }
+      : payload;
+  return NextResponse.json(nextPayload, { status: response.status });
 }

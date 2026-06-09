@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { forwardJson, requireAdmin } from "../_shared";
 
 export const runtime = "nodejs";
