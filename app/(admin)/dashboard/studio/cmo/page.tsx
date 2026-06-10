@@ -851,30 +851,28 @@ export default function StudioCmoPage() {
     }
   };
 
-  const openBriefInEditor = (brief: BriefItem) => {
-    const title = brief.title || "Brief editorial";
-    const meta = [brief.objective, brief.angle, brief.cta].filter(Boolean).join(" | ");
-    const content = [
-      `<h2>${title}</h2>`,
-      brief.objective ? `<p><strong>Objetivo:</strong> ${brief.objective}</p>` : "",
-      brief.angle ? `<p><strong>Ângulo:</strong> ${brief.angle}</p>` : "",
-      Array.isArray(brief.keyMessages) && brief.keyMessages.length
-        ? `<ul>${brief.keyMessages.map((message) => `<li>${message}</li>`).join("")}</ul>`
-        : "",
-      brief.cta ? `<p><strong>CTA:</strong> ${brief.cta}</p>` : "",
-    ]
-      .filter(Boolean)
-      .join("");
-
+  const openBriefEdit = (brief: BriefItem) => {
     const searchParams = new URLSearchParams({
       briefId: String(brief.id || ""),
-      title,
-      meta,
-      content,
-      tags: Array.isArray(brief.audience) ? brief.audience.slice(0, 3).join(", ") : "",
     });
 
-    router.push(`/dashboard/posts/create?${searchParams.toString()}`);
+    router.push(`/dashboard/studio/cmo/briefs/${encodeURIComponent(String(brief.id || ""))}/edit?${searchParams.toString()}`);
+  };
+
+  const openBriefDraft = (brief: BriefItem) => {
+    const searchParams = new URLSearchParams({
+      briefId: String(brief.id || ""),
+      orgId,
+      briefTitle: brief.title || "Brief editorial",
+      briefObjective: brief.objective || "",
+      briefAngle: brief.angle || "",
+      briefCta: brief.cta || "",
+      briefChannel: brief.channel || "",
+      briefTheme: brief.theme || "",
+      briefScope: brief.scope || "",
+    });
+
+    router.push(`/dashboard/studio/cmo/draft?${searchParams.toString()}`);
   };
 
   return (
@@ -1057,7 +1055,7 @@ export default function StudioCmoPage() {
                   Revisao
                 </div>
                 <div className="text-sm text-secondary-dark dark:text-secondary-light">
-                  Depois disso, o usuario abre o editor e valida o conteudo final.
+                  Depois disso, o usuario revisa o rascunho e abre o editor final.
                 </div>
               </div>
             </div>
@@ -1084,7 +1082,7 @@ export default function StudioCmoPage() {
                   Briefs em revisao
                 </div>
                 <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                  Aprovar, enviar para a agenda e abrir no editor
+                  Editar brief, gerar texto e enviar para a agenda
                 </div>
               </div>
               {briefsError ? (
@@ -1132,10 +1130,17 @@ export default function StudioCmoPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => openBriefInEditor(brief)}
+                            onClick={() => openBriefEdit(brief)}
                             className="rounded border border-secondary-dark/30 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/30"
                           >
-                            Editor
+                            Editar brief
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openBriefDraft(brief)}
+                            className="rounded border border-secondary-dark/30 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/30"
+                          >
+                            Gerar texto
                           </button>
                         </div>
                       </div>
@@ -1214,3 +1219,6 @@ function ReadOnlyJson({ title, value }: { title: string; value: unknown }) {
     </div>
   );
 }
+
+
+

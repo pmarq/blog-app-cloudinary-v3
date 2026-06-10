@@ -132,30 +132,24 @@ export default function StudioBriefs() {
     }
   };
 
-  const openInEditor = (brief: Brief) => {
-    const title = brief.title || "Brief editorial";
-    const meta = [brief.objective, brief.angle, brief.cta].filter(Boolean).join(" | ");
-    const content = [
-      `<h2>${title}</h2>`,
-      brief.objective ? `<p><strong>Objetivo:</strong> ${brief.objective}</p>` : "",
-      brief.angle ? `<p><strong>Ângulo:</strong> ${brief.angle}</p>` : "",
-      Array.isArray(brief.keyMessages) && brief.keyMessages.length
-        ? `<ul>${brief.keyMessages.map((message) => `<li>${message}</li>`).join("")}</ul>`
-        : "",
-      brief.cta ? `<p><strong>CTA:</strong> ${brief.cta}</p>` : "",
-    ]
-      .filter(Boolean)
-      .join("");
+  const openBriefEdit = (brief: Brief) => {
+    router.push(`/dashboard/studio/cmo/briefs/${encodeURIComponent(String(brief.id || ""))}/edit`);
+  };
 
+  const openBriefDraft = (brief: Brief) => {
     const searchParams = new URLSearchParams({
       briefId: String(brief.id || ""),
-      title,
-      meta,
-      content,
-      tags: Array.isArray(brief.audience) ? brief.audience.slice(0, 3).join(", ") : "",
+      orgId: DEFAULT_ORG_ID,
+      briefTitle: brief.title || "Brief editorial",
+      briefObjective: brief.objective || "",
+      briefAngle: brief.angle || "",
+      briefCta: brief.cta || "",
+      briefChannel: brief.channel || "",
+      briefTheme: brief.theme || "",
+      briefScope: brief.scope || "",
     });
 
-    router.push(`/dashboard/posts/create?${searchParams.toString()}`);
+    router.push(`/dashboard/studio/cmo/draft?${searchParams.toString()}`);
   };
 
   return (
@@ -205,9 +199,15 @@ export default function StudioBriefs() {
                   <td className="p-3 space-x-2">
                     <button
                       className="text-xs px-2 py-1 border rounded border-secondary-dark/40 dark:border-secondary-light/40 hover:bg-secondary-light/30 dark:hover:bg-secondary-dark/30 transition"
-                      onClick={() => openInEditor(brief)}
+                      onClick={() => openBriefEdit(brief)}
                     >
-                      Abrir no editor
+                      Editar brief
+                    </button>
+                    <button
+                      className="text-xs px-2 py-1 border rounded border-secondary-dark/40 dark:border-secondary-light/40 hover:bg-secondary-light/30 dark:hover:bg-secondary-dark/30 transition"
+                      onClick={() => openBriefDraft(brief)}
+                    >
+                      Gerar texto
                     </button>
                     <button
                       className="text-xs px-2 py-1 border rounded border-secondary-dark/40 dark:border-secondary-light/40 hover:bg-secondary-light/30 dark:hover:bg-secondary-dark/30 transition"
@@ -233,3 +233,6 @@ export default function StudioBriefs() {
     </AdminLayout>
   );
 }
+
+
+
