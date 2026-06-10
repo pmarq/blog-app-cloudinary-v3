@@ -21,10 +21,55 @@ export async function GET(request: NextRequest) {
       },
     );
 
-    const payload = await response.json().catch(() => ({}));
-    return NextResponse.json(payload, { status: response.status });
+    const responseText = await response.text().catch(() => "");
+    let payload: unknown = {};
+    if (responseText) {
+      try {
+        payload = JSON.parse(responseText);
+      } catch {
+        payload = { ok: false, message: responseText };
+      }
+    }
+
+    if (!response.ok) {
+      console.warn("[studio/cmo/content] upstream error", response.status, payload);
+      return NextResponse.json(
+        {
+          ok: true,
+          orgId: searchParams.get("orgId") || null,
+          briefId: searchParams.get("briefId") || null,
+          items: [],
+          warning: "Nenhum texto rascunho salvo encontrado. O sistema vai gerar um novo.",
+        },
+        { status: 200 },
+      );
+    }
+
+    if (!payload || typeof payload !== "object") {
+      return NextResponse.json(
+        {
+          ok: true,
+          orgId: searchParams.get("orgId") || null,
+          briefId: searchParams.get("briefId") || null,
+          items: [],
+        },
+        { status: 200 },
+      );
+    }
+
+    return NextResponse.json(payload, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Falha ao carregar conteúdo.";
-    return NextResponse.json({ ok: false, message }, { status: 500 });
+    console.warn("[studio/cmo/content] proxy fallback", message);
+    return NextResponse.json(
+      {
+        ok: true,
+        orgId: searchParams.get("orgId") || null,
+        briefId: searchParams.get("briefId") || null,
+        items: [],
+        warning: message,
+      },
+      { status: 200 },
+    );
   }
 }

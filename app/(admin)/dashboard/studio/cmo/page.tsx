@@ -289,15 +289,15 @@ function getStageConfig(stage: CmoStage) {
     },
     briefs: {
       eyebrow: "Producao",
-      title: "Crie briefs para execucao",
-      description: "Cada pauta vira um brief claro para orientar texto, tom, CTA e guardrails.",
+      title: "Crie briefs para producao",
+      description: "Cada pauta vira um brief claro para orientar o texto, tom, CTA e guardrails.",
       actionLabel: "Gerar briefs",
       hint: "Brief bom reduz retrabalho na producao.",
     },
     ready: {
       eyebrow: "Fim do fluxo",
       title: "Abra a area de briefs",
-      description: "Voce ja saiu do diagnostico e chegou na etapa de revisao e distribuicao dos briefs.",
+      description: "Voce ja saiu do diagnostico e chegou na etapa de revisao, geracao de texto e distribuicao dos briefs.",
       actionLabel: "Abrir briefs",
       hint: "Agora a proxima tela e a de revisao editorial.",
     },
@@ -1055,7 +1055,7 @@ export default function StudioCmoPage() {
                   Revisao
                 </div>
                 <div className="text-sm text-secondary-dark dark:text-secondary-light">
-                  Depois disso, o usuario revisa o rascunho e abre o editor final.
+                  Depois disso, o usuario revisa o texto rascunho e abre o editor final.
                 </div>
               </div>
             </div>
@@ -1118,7 +1118,7 @@ export default function StudioCmoPage() {
                             disabled={updatingBriefId === brief.id || sendingBriefId === brief.id}
                             className="rounded border border-secondary-dark/30 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/30 disabled:opacity-60"
                           >
-                            {updatingBriefId === brief.id ? "Aprovando..." : "Aprovar"}
+                            {updatingBriefId === brief.id ? "Aprovando..." : "Marcar como aprovado"}
                           </button>
                           <button
                             type="button"
@@ -1126,7 +1126,7 @@ export default function StudioCmoPage() {
                             disabled={sendingBriefId === brief.id}
                             className="rounded border border-highlight-light px-3 py-1 text-xs font-semibold text-highlight-light transition hover:bg-secondary-light/20 disabled:opacity-60"
                           >
-                            {sendingBriefId === brief.id ? "Enviando..." : "Enviar"}
+                            {sendingBriefId === brief.id ? "Enviando..." : "Enviar para agenda"}
                           </button>
                           <button
                             type="button"
@@ -1140,7 +1140,7 @@ export default function StudioCmoPage() {
                             onClick={() => openBriefDraft(brief)}
                             className="rounded border border-secondary-dark/30 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/30"
                           >
-                            Gerar texto
+                            Gerar texto rascunho
                           </button>
                         </div>
                       </div>

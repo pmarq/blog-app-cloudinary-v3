@@ -207,14 +207,14 @@ export default function StudioBriefs() {
                       className="text-xs px-2 py-1 border rounded border-secondary-dark/40 dark:border-secondary-light/40 hover:bg-secondary-light/30 dark:hover:bg-secondary-dark/30 transition"
                       onClick={() => openBriefDraft(brief)}
                     >
-                      Gerar texto
+                      Gerar texto rascunho
                     </button>
                     <button
                       className="text-xs px-2 py-1 border rounded border-secondary-dark/40 dark:border-secondary-light/40 hover:bg-secondary-light/30 dark:hover:bg-secondary-dark/30 transition"
                       onClick={() => void approveBrief(brief.id)}
                       disabled={updatingBriefId === brief.id}
                     >
-                      {updatingBriefId === brief.id ? "Aprovando..." : "Aprovar"}
+                      {updatingBriefId === brief.id ? "Aprovando..." : "Marcar como aprovado"}
                     </button>
                     <button
                       className="text-xs px-2 py-1 border rounded border-highlight-light text-highlight-light hover:bg-secondary-light/30 dark:hover:bg-secondary-dark/30 transition disabled:opacity-60"
