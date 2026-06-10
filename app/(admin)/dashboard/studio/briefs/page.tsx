@@ -2,7 +2,8 @@
 
 import AdminLayout from "@/app/components/layout/AdminLayout";
 import StudioNav from "@/app/components/admin/StudioNav";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { auth } from "@/firebase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -27,11 +28,16 @@ type Brief = {
   angle?: string;
   keyMessages?: string[];
   cta?: string;
+  sourceType?: string | null;
+  editorialQuestion?: string | null;
+  whyNow?: string | null;
+  contentFormat?: string | null;
   scheduledAt?: string | null;
 };
 
 export default function StudioBriefs() {
   const [briefs, setBriefs] = useState<Brief[]>([]);
+  const [activeTab, setActiveTab] = useState<"pautas" | "briefs">("pautas");
   const [loading, setLoading] = useState(false);
   const [updatingBriefId, setUpdatingBriefId] = useState<string | null>(null);
   const [sendingBriefId, setSendingBriefId] = useState<string | null>(null);
@@ -147,21 +153,43 @@ export default function StudioBriefs() {
       briefChannel: brief.channel || "",
       briefTheme: brief.theme || "",
       briefScope: brief.scope || "",
+      briefEditorialQuestion: brief.editorialQuestion || "",
+      briefWhyNow: brief.whyNow || "",
+      briefContentFormat: brief.contentFormat || "",
+      briefSourceType: brief.sourceType || "",
     });
 
     router.push(`/dashboard/studio/cmo/draft?${searchParams.toString()}`);
   };
+
+  const { pautas, briefsProduction } = useMemo(() => {
+    const productionStatuses = new Set(["approved", "scheduled", "published"]);
+    const pautaItems = briefs.filter((brief) => !productionStatuses.has(String(brief.status || "").toLowerCase()));
+    const briefItems = briefs.filter((brief) => productionStatuses.has(String(brief.status || "").toLowerCase()));
+    return { pautas: pautaItems, briefsProduction: briefItems };
+  }, [briefs]);
+
+  const visibleItems = activeTab === "pautas" ? pautas : briefsProduction;
 
   return (
     <AdminLayout>
       <div className="max-w-5xl space-y-2">
         <StudioNav />
         <h1 className="text-2xl font-semibold text-highlight-light dark:text-highlight-dark">
-          Briefs
+          Pautas & briefs
         </h1>
         <p className="text-secondary-dark dark:text-secondary-light">
-          Briefs reais do Studio CMO, já conectados ao calendário e ao editor de post.
+          Pautas reais do Studio CMO, já conectadas ao calendário e ao editor de post.
         </p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <TabButton active={activeTab === "pautas"} onClick={() => setActiveTab("pautas")}>
+            Pautas
+          </TabButton>
+          <TabButton active={activeTab === "briefs"} onClick={() => setActiveTab("briefs")}>
+            Briefs
+          </TabButton>
+        </div>
 
         {loading && (
           <p className="text-xs text-secondary-dark dark:text-secondary-light">
@@ -170,7 +198,7 @@ export default function StudioBriefs() {
         )}
         {error && <p className="text-xs text-red-500">{error}</p>}
 
-        <div className="mt-4 overflow-hidden rounded border border-secondary-dark/30 dark:border-secondary-light/30">
+        <div className="mt-2 overflow-hidden rounded border border-secondary-dark/30 dark:border-secondary-light/30">
           <table className="w-full text-sm">
             <thead className="bg-secondary-light/40 dark:bg-secondary-dark/40 text-left">
               <tr>
@@ -181,7 +209,7 @@ export default function StudioBriefs() {
               </tr>
             </thead>
             <tbody>
-              {briefs.map((brief) => (
+              {visibleItems.map((brief) => (
                 <tr
                   key={brief.id}
                   className="border-t border-secondary-dark/20 dark:border-secondary-light/20"
@@ -192,7 +220,23 @@ export default function StudioBriefs() {
                     </div>
                     <div className="text-xs text-secondary-dark/60 dark:text-secondary-light/60">
                       {brief.objective || "Sem objetivo"}
+                      {brief.sourceType ? ` • origem: ${brief.sourceType}` : ""}
                     </div>
+                    {brief.editorialQuestion ? (
+                      <div className="mt-1 text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                        {brief.editorialQuestion}
+                      </div>
+                    ) : null}
+                    {brief.whyNow ? (
+                      <div className="mt-1 text-xs text-secondary-dark/60 dark:text-secondary-light/60">
+                        {brief.whyNow}
+                      </div>
+                    ) : null}
+                    {brief.contentFormat ? (
+                      <div className="mt-1 text-[11px] uppercase tracking-wide text-secondary-dark/50 dark:text-secondary-light/50">
+                        {brief.contentFormat}
+                      </div>
+                    ) : null}
                   </td>
                   <td className="p-3 capitalize">{brief.channel || "blog"}</td>
                   <td className="p-3 capitalize">{brief.status || "draft"}</td>
@@ -201,13 +245,13 @@ export default function StudioBriefs() {
                       className="text-xs px-2 py-1 border rounded border-secondary-dark/40 dark:border-secondary-light/40 hover:bg-secondary-light/30 dark:hover:bg-secondary-dark/30 transition"
                       onClick={() => openBriefEdit(brief)}
                     >
-                      Editar brief
+                      Editar pauta
                     </button>
                     <button
                       className="text-xs px-2 py-1 border rounded border-secondary-dark/40 dark:border-secondary-light/40 hover:bg-secondary-light/30 dark:hover:bg-secondary-dark/30 transition"
                       onClick={() => openBriefDraft(brief)}
                     >
-                      Gerar texto rascunho
+                      Gerar texto
                     </button>
                     <button
                       className="text-xs px-2 py-1 border rounded border-secondary-dark/40 dark:border-secondary-light/40 hover:bg-secondary-light/30 dark:hover:bg-secondary-dark/30 transition"
@@ -226,6 +270,15 @@ export default function StudioBriefs() {
                   </td>
                 </tr>
               ))}
+              {!visibleItems.length ? (
+                <tr>
+                  <td className="p-4 text-xs text-secondary-dark/70 dark:text-secondary-light/70" colSpan={4}>
+                    {activeTab === "pautas"
+                      ? "Nenhuma pauta encontrada."
+                      : "Nenhum brief de produção encontrado."}
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
@@ -234,5 +287,26 @@ export default function StudioBriefs() {
   );
 }
 
-
-
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded border px-3 py-1 text-sm transition ${
+        active
+          ? "border-highlight-light text-highlight-light bg-secondary-light/20 dark:border-highlight-dark dark:text-highlight-dark dark:bg-secondary-dark/30"
+          : "border-secondary-dark/30 text-secondary-dark hover:bg-secondary-light/20 dark:border-secondary-light/30 dark:text-secondary-light dark:hover:bg-secondary-dark/30"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}

@@ -19,6 +19,12 @@ type BriefData = {
   objective?: string;
   angle?: string;
   cta?: string;
+  sourceType?: string | null;
+  editorialQuestion?: string | null;
+  whyNow?: string | null;
+  contentFormat?: string | null;
+  manualTopic?: string | null;
+  priority?: number | null;
   audience?: string[];
   keyMessages?: string[];
   guardrails?: string[];
@@ -39,6 +45,12 @@ type BriefFormState = {
   objective: string;
   angle: string;
   cta: string;
+  sourceType: string;
+  editorialQuestion: string;
+  whyNow: string;
+  contentFormat: string;
+  manualTopic: string;
+  priority: string;
   audience: string;
   keyMessages: string;
   guardrails: string;
@@ -86,6 +98,12 @@ export default function EditBriefClient({ briefId }: Props) {
     objective: "",
     angle: "",
     cta: "",
+    sourceType: "",
+    editorialQuestion: "",
+    whyNow: "",
+    contentFormat: "",
+    manualTopic: "",
+    priority: "",
     audience: "",
     keyMessages: "",
     guardrails: "",
@@ -141,6 +159,15 @@ export default function EditBriefClient({ briefId }: Props) {
           objective: nextBrief.objective || "",
           angle: nextBrief.angle || "",
           cta: nextBrief.cta || "",
+          sourceType: nextBrief.sourceType || "",
+          editorialQuestion: nextBrief.editorialQuestion || "",
+          whyNow: nextBrief.whyNow || "",
+          contentFormat: nextBrief.contentFormat || "",
+          manualTopic: nextBrief.manualTopic || "",
+          priority:
+            nextBrief.priority !== undefined && nextBrief.priority !== null
+              ? String(nextBrief.priority)
+              : "",
           audience: toText(nextBrief.audience),
           keyMessages: toText(nextBrief.keyMessages),
           guardrails: toText(nextBrief.guardrails),
@@ -194,6 +221,12 @@ export default function EditBriefClient({ briefId }: Props) {
             objective: form.objective || null,
             angle: form.angle || null,
             cta: form.cta || null,
+            sourceType: form.sourceType || null,
+            editorialQuestion: form.editorialQuestion || null,
+            whyNow: form.whyNow || null,
+            contentFormat: form.contentFormat || null,
+            manualTopic: form.manualTopic || null,
+            priority: form.priority ? Number(form.priority) : null,
             audience: fromText(form.audience),
             keyMessages: fromText(form.keyMessages),
             guardrails: fromText(form.guardrails),
@@ -227,9 +260,9 @@ export default function EditBriefClient({ briefId }: Props) {
     const saved = await saveBrief();
     if (!saved) return;
     router.push(
-      `/dashboard/studio/cmo/draft?briefId=${encodeURIComponent(normalizedBriefId)}&orgId=${encodeURIComponent(brief?.orgId || "")}&briefTitle=${encodeURIComponent(form.title)}&briefObjective=${encodeURIComponent(form.objective)}&briefAngle=${encodeURIComponent(form.angle)}&briefCta=${encodeURIComponent(form.cta)}&briefChannel=${encodeURIComponent(form.channel)}&briefTheme=${encodeURIComponent(form.theme)}&briefScope=${encodeURIComponent(form.scope)}`,
+      `/dashboard/studio/cmo/draft?briefId=${encodeURIComponent(normalizedBriefId)}&orgId=${encodeURIComponent(brief?.orgId || "")}&briefTitle=${encodeURIComponent(form.title)}&briefObjective=${encodeURIComponent(form.objective)}&briefAngle=${encodeURIComponent(form.angle)}&briefCta=${encodeURIComponent(form.cta)}&briefChannel=${encodeURIComponent(form.channel)}&briefTheme=${encodeURIComponent(form.theme)}&briefScope=${encodeURIComponent(form.scope)}&briefEditorialQuestion=${encodeURIComponent(form.editorialQuestion)}&briefWhyNow=${encodeURIComponent(form.whyNow)}&briefContentFormat=${encodeURIComponent(form.contentFormat)}&briefSourceType=${encodeURIComponent(form.sourceType)}`,
     );
-  }, [brief?.orgId, form.angle, form.channel, form.cta, form.objective, form.scope, form.theme, form.title, normalizedBriefId, router, saveBrief]);
+  }, [brief?.orgId, form.angle, form.channel, form.contentFormat, form.cta, form.editorialQuestion, form.objective, form.scope, form.sourceType, form.theme, form.title, form.whyNow, normalizedBriefId, router, saveBrief]);
 
   return (
     <AdminLayout>
@@ -280,12 +313,18 @@ export default function EditBriefClient({ briefId }: Props) {
             <Field label="Tema" value={form.theme} onChange={(value) => setForm((prev) => ({ ...prev, theme: value }))} />
             <Field label="Escopo" value={form.scope} onChange={(value) => setForm((prev) => ({ ...prev, scope: value }))} />
             <Field label="CTA" value={form.cta} onChange={(value) => setForm((prev) => ({ ...prev, cta: value }))} />
+            <Field label="Origem" value={form.sourceType} onChange={(value) => setForm((prev) => ({ ...prev, sourceType: value }))} />
+            <Field label="Formato" value={form.contentFormat} onChange={(value) => setForm((prev) => ({ ...prev, contentFormat: value }))} />
+            <Field label="Pauta-base" value={form.manualTopic} onChange={(value) => setForm((prev) => ({ ...prev, manualTopic: value }))} />
+            <Field label="Prioridade" value={form.priority} onChange={(value) => setForm((prev) => ({ ...prev, priority: value }))} />
             <Field label="Agendado em" type="datetime-local" value={form.scheduledAt} onChange={(value) => setForm((prev) => ({ ...prev, scheduledAt: value }))} />
           </div>
 
           <div className="grid gap-3">
             <TextAreaField label="Objetivo" value={form.objective} onChange={(value) => setForm((prev) => ({ ...prev, objective: value }))} />
             <TextAreaField label="Ângulo" value={form.angle} onChange={(value) => setForm((prev) => ({ ...prev, angle: value }))} />
+            <TextAreaField label="Pergunta editorial" value={form.editorialQuestion} onChange={(value) => setForm((prev) => ({ ...prev, editorialQuestion: value }))} />
+            <TextAreaField label="Por que agora" value={form.whyNow} onChange={(value) => setForm((prev) => ({ ...prev, whyNow: value }))} />
             <TextAreaField label="Público-alvo" value={form.audience} onChange={(value) => setForm((prev) => ({ ...prev, audience: value }))} />
             <TextAreaField label="Mensagens-chave" value={form.keyMessages} onChange={(value) => setForm((prev) => ({ ...prev, keyMessages: value }))} />
             <TextAreaField label="Guardrails" value={form.guardrails} onChange={(value) => setForm((prev) => ({ ...prev, guardrails: value }))} />

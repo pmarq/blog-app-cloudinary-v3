@@ -54,6 +54,10 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
   const briefChannel = firstValue(initialSearchParams.briefChannel);
   const briefTheme = firstValue(initialSearchParams.briefTheme);
   const briefScope = firstValue(initialSearchParams.briefScope);
+  const briefEditorialQuestion = firstValue(initialSearchParams.briefEditorialQuestion);
+  const briefWhyNow = firstValue(initialSearchParams.briefWhyNow);
+  const briefContentFormat = firstValue(initialSearchParams.briefContentFormat);
+  const briefSourceType = firstValue(initialSearchParams.briefSourceType);
 
   const [generating, setGenerating] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -78,8 +82,23 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
       briefScope ? `Escopo: ${briefScope}` : "",
       briefChannel ? `Canal: ${briefChannel}` : "",
       briefTheme ? `Tema: ${briefTheme}` : "",
+      briefContentFormat ? `Formato: ${briefContentFormat}` : "",
+      briefSourceType ? `Origem: ${briefSourceType}` : "",
+      briefEditorialQuestion ? `Pergunta editorial: ${briefEditorialQuestion}` : "",
+      briefWhyNow ? `Por que agora: ${briefWhyNow}` : "",
     ].filter(Boolean),
-    [briefAngle, briefCta, briefChannel, briefObjective, briefScope, briefTheme],
+    [
+      briefAngle,
+      briefCta,
+      briefChannel,
+      briefContentFormat,
+      briefEditorialQuestion,
+      briefObjective,
+      briefScope,
+      briefSourceType,
+      briefTheme,
+      briefWhyNow,
+    ],
   );
 
   const getToken = useCallback(async () => {
@@ -212,7 +231,7 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
   const openInEditor = useCallback(() => {
     const title = content?.title || briefTitle || "Rascunho editorial";
     const body = content?.body || "";
-    const metaValue = [briefObjective, briefAngle, briefCta].filter(Boolean).join(" | ");
+    const metaValue = [briefObjective, briefAngle, briefCta, briefEditorialQuestion, briefWhyNow].filter(Boolean).join(" | ");
     const search = new URLSearchParams({
       briefId,
       title,
@@ -223,7 +242,19 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
     });
 
     router.push(`/dashboard/posts/create?${search.toString()}`);
-  }, [briefAngle, briefCta, briefChannel, briefId, briefObjective, briefTitle, content?.body, content?.title, router]);
+  }, [
+    briefAngle,
+    briefCta,
+    briefChannel,
+    briefEditorialQuestion,
+    briefId,
+    briefObjective,
+    briefTitle,
+    briefWhyNow,
+    content?.body,
+    content?.title,
+    router,
+  ]);
 
   const totalSources = (content?.sources?.kb?.length ?? 0) + (content?.sources?.web?.length ?? 0);
 

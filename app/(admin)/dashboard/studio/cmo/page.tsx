@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -109,6 +109,12 @@ type BriefItem = {
   angle?: string;
   keyMessages?: string[];
   cta?: string;
+  sourceType?: string | null;
+  editorialQuestion?: string | null;
+  whyNow?: string | null;
+  contentFormat?: string | null;
+  manualTopic?: string | null;
+  priority?: number | null;
   guardrails?: string[];
   requiredSources?: {
     kb?: boolean;
@@ -143,6 +149,58 @@ function fromLines(value: string): string[] {
     .split(/\r?\n|,|;/g)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(normalized);
+  }
+
+  return output;
+}
+
+function buildTopicSuggestionList({
+  companyProfile,
+  strategy,
+  calendarItems,
+}: {
+  companyProfile: CompanyProfile;
+  strategy: StrategyPayload | null;
+  calendarItems: CalendarItem[];
+}): string[] {
+  const firstAudience = companyProfile.audience[0] || strategy?.priorityAudiences?.[0] || "";
+  const firstRegion = companyProfile.regions[0] || strategy?.priorityRegions?.[0] || "";
+  const firstSegment = companyProfile.marketSegment[0] || "";
+  const firstPreferredTopic = companyProfile.preferredTopics[0] || strategy?.contentPillars?.[0] || "";
+  const firstGoal = companyProfile.commercialGoals[0] || strategy?.objective || "";
+  const firstSignal = strategy?.marketSignals?.[0] || "";
+  const firstCalendar = calendarItems[0];
+  const secondCalendar = calendarItems[1];
+  const firstCalendarTitle = firstCalendar?.title || firstCalendar?.theme || firstCalendar?.scope || "";
+  const secondCalendarTitle = secondCalendar?.title || secondCalendar?.theme || secondCalendar?.scope || "";
+
+  return uniqueStrings([
+    firstPreferredTopic && firstAudience
+      ? `${firstPreferredTopic} para ${firstAudience}`
+      : null,
+    firstPreferredTopic && firstRegion
+      ? `${firstPreferredTopic} em ${firstRegion}`
+      : null,
+    firstGoal && firstSegment ? `Como gerar resultado com ${firstGoal} em ${firstSegment}` : null,
+    firstSignal && firstAudience ? `O que ${firstSignal} muda para ${firstAudience}` : null,
+    firstCalendarTitle && firstGoal ? `${firstCalendarTitle} com foco em ${firstGoal}` : null,
+    secondCalendarTitle && firstRegion ? `${secondCalendarTitle} pensando em ${firstRegion}` : null,
+    firstSegment ? `Checklist prático para ${firstSegment}` : null,
+    firstAudience ? `Erros comuns de conteúdo para ${firstAudience}` : null,
+  ]).slice(0, 8);
 }
 
 function formatJson(value: unknown): string {
@@ -190,6 +248,8 @@ function getBriefSignature(brief: BriefItem): string {
     brief.period || "",
     brief.channel || "",
     brief.objective || "",
+    brief.sourceType || "",
+    brief.editorialQuestion || "",
   ]
     .map((part) => String(part || "").trim().toLowerCase())
     .join("|");
@@ -309,6 +369,8 @@ function getStageConfig(stage: CmoStage) {
 export default function StudioCmoPage() {
   const { toast } = useToast();
   const router = useRouter();
+  const [activeSection, setActiveSection] = useState<"diagnostico" | "pautas" | "revisao">("diagnostico");
+  const [activePautaView, setActivePautaView] = useState<"ia" | "usuario">("ia");
   const [orgId] = useState(DEFAULT_ORG_ID);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [loadingDrafts, setLoadingDrafts] = useState(false);
@@ -321,6 +383,7 @@ export default function StudioCmoPage() {
   const [updatingBriefId, setUpdatingBriefId] = useState<string | null>(null);
   const [sendingBriefId, setSendingBriefId] = useState<string | null>(null);
   const [briefsError, setBriefsError] = useState<string | null>(null);
+  const [manualTopics, setManualTopics] = useState("");
 
   const [portfolioSnapshots, setPortfolioSnapshots] = useState<PortfolioSnapshot[]>([]);
   const [marketOpportunityDrafts, setMarketOpportunityDrafts] = useState<MarketOpportunityPayload[]>(
@@ -337,7 +400,7 @@ export default function StudioCmoPage() {
 
   const [period, setPeriod] = useState("2026-06");
   const [objective, setObjective] = useState(
-    "aumentar leads qualificados para alto padrão em São Paulo",
+    "aumentar leads qualificados para alto padrÃ£o em SÃ£o Paulo",
   );
 
   const profileFormValue = useMemo(
@@ -370,6 +433,64 @@ export default function StudioCmoPage() {
 
   const stageConfig = useMemo(() => getStageConfig(cmoStage), [cmoStage]);
   const uniqueBriefItems = useMemo(() => dedupeBriefItems(briefItems), [briefItems]);
+  const pautaIaItems = useMemo(
+    () =>
+      uniqueBriefItems.filter(
+        (brief) => String(brief.sourceType || "").trim().toLowerCase() !== "manual",
+      ),
+    [uniqueBriefItems],
+  );
+  const pautaUserItems = useMemo(
+    () =>
+      uniqueBriefItems.filter(
+        (brief) => String(brief.sourceType || "").trim().toLowerCase() === "manual",
+      ),
+    [uniqueBriefItems],
+  );
+  const manualTopicSuggestions = useMemo(() => fromLines(manualTopics), [manualTopics]);
+  const aiTopicSuggestions = useMemo(
+    () =>
+      buildTopicSuggestionList({
+        companyProfile,
+        strategy,
+        calendarItems,
+    }),
+    [calendarItems, companyProfile, strategy],
+  );
+  const briefGenerationIssues = useMemo(() => {
+    const issues: string[] = [];
+
+    if (!hasText(companyProfile.name)) issues.push("Preencha o nome da empresa.");
+    if (!hasText(companyProfile.positioning)) issues.push("Descreva o posicionamento.");
+    if (!hasText(companyProfile.valueProposition)) issues.push("Explique a proposta de valor.");
+    if (!companyProfile.audience.length) issues.push("Defina o público-alvo.");
+    if (!strategy?.id) issues.push("Gere a estratégia antes dos briefs.");
+    if (!calendarItems.length) issues.push("Gere o calendário editorial antes dos briefs.");
+    if (!manualTopicSuggestions.length && !aiTopicSuggestions.length) {
+      issues.push("Adicione pautas do usuário ou use sugestões IA.");
+    }
+
+    return issues;
+  }, [aiTopicSuggestions, calendarItems.length, companyProfile.audience.length, companyProfile.name, companyProfile.positioning, companyProfile.valueProposition, manualTopicSuggestions.length, strategy?.id]);
+  const briefGenerationReady = briefGenerationIssues.length === 0;
+
+  const appendTopicToManualTopics = (topic: string) => {
+    const nextTopics = uniqueStrings([...fromLines(manualTopics), topic]);
+    setManualTopics(nextTopics.join("\n"));
+    setActivePautaView("usuario");
+  };
+
+  const appendAllAiSuggestions = () => {
+    const nextTopics = uniqueStrings([...fromLines(manualTopics), ...aiTopicSuggestions]);
+    setManualTopics(nextTopics.join("\n"));
+    setActivePautaView("usuario");
+  };
+
+  const jumpToSection = (sectionId: "diagnostico" | "pautas" | "revisao") => {
+    setActiveSection(sectionId);
+    if (typeof document === "undefined") return;
+    document.getElementById(`cmo-${sectionId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const executeNextStep = async () => {
     if (cmoStage === "profile") {
@@ -403,7 +524,7 @@ export default function StudioCmoPage() {
   const getToken = async () => {
     const token = await auth.currentUser?.getIdToken(true);
     if (!token) {
-      throw new Error("Sessão necessária. Faça login novamente.");
+      throw new Error("SessÃ£o necessÃ¡ria. FaÃ§a login novamente.");
     }
     return token;
   };
@@ -459,10 +580,10 @@ export default function StudioCmoPage() {
         throw new Error(opportunitiesPayload?.message || "Falha ao carregar oportunidades.");
       }
       if (!strategiesResponse.ok || !strategiesPayload?.ok) {
-        throw new Error(strategiesPayload?.message || "Falha ao carregar estratégias.");
+        throw new Error(strategiesPayload?.message || "Falha ao carregar estratÃ©gias.");
       }
       if (!calendarResponse.ok || !calendarPayload?.ok) {
-        throw new Error(calendarPayload?.message || "Falha ao carregar calendário.");
+        throw new Error(calendarPayload?.message || "Falha ao carregar calendÃ¡rio.");
       }
       if (!briefsResponse.ok || !briefsPayload?.ok) {
         throw new Error(briefsPayload?.message || "Falha ao carregar briefs.");
@@ -629,13 +750,13 @@ export default function StudioCmoPage() {
       });
       const payload = await response.json();
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.message || "Falha ao analisar portfólio.");
+        throw new Error(payload?.message || "Falha ao analisar portfÃ³lio.");
       }
       setPortfolioSnapshot(payload.latestPortfolioSnapshot || null);
       await refreshDrafts();
-      toast({ title: "Portfólio analisado", description: "Snapshot atualizado." });
+      toast({ title: "PortfÃ³lio analisado", description: "Snapshot atualizado." });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Erro ao analisar portfólio.";
+      const message = error instanceof Error ? error.message : "Erro ao analisar portfÃ³lio.";
       toast({ title: "Erro", description: message, variant: "destructive" });
     } finally {
       setAnalyzingPortfolio(false);
@@ -692,13 +813,13 @@ export default function StudioCmoPage() {
       });
       const payload = await response.json();
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.message || "Falha ao gerar estratégia.");
+        throw new Error(payload?.message || "Falha ao gerar estratÃ©gia.");
       }
       setStrategy(payload.latestStrategy || null);
       await refreshDrafts();
-      toast({ title: "Estratégia gerada", description: "Plano CMO salvo no backend." });
+      toast({ title: "EstratÃ©gia gerada", description: "Plano CMO salvo no backend." });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Erro ao gerar estratégia.";
+      const message = error instanceof Error ? error.message : "Erro ao gerar estratÃ©gia.";
       toast({ title: "Erro", description: message, variant: "destructive" });
     } finally {
       setGeneratingStrategy(false);
@@ -724,7 +845,7 @@ export default function StudioCmoPage() {
       });
       const payload = await response.json();
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.message || "Falha ao gerar calendário.");
+        throw new Error(payload?.message || "Falha ao gerar calendÃ¡rio.");
       }
       setCalendarItems(
         Array.isArray(payload.latestCalendar?.items)
@@ -732,9 +853,9 @@ export default function StudioCmoPage() {
           : [],
       );
       await refreshDrafts();
-      toast({ title: "Calendário gerado", description: "Pautas editoriais salvas no backend." });
+      toast({ title: "CalendÃ¡rio gerado", description: "Pautas editoriais salvas no backend." });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Erro ao gerar calendário.";
+      const message = error instanceof Error ? error.message : "Erro ao gerar calendÃ¡rio.";
       toast({ title: "Erro", description: message, variant: "destructive" });
     } finally {
       setGeneratingCalendar(false);
@@ -742,6 +863,15 @@ export default function StudioCmoPage() {
   };
 
   const generateBriefs = async () => {
+    if (!briefGenerationReady) {
+      const message =
+        "Não gerei os briefs porque o contexto ainda está fraco:\n- " +
+        briefGenerationIssues.join("\n- ");
+      setBriefsError(message);
+      toast({ title: "Contexto insuficiente", description: briefGenerationIssues[0], variant: "destructive" });
+      return;
+    }
+
     setGeneratingBriefs(true);
     setBriefsError(null);
     try {
@@ -757,6 +887,7 @@ export default function StudioCmoPage() {
           strategyId: strategy?.id || undefined,
           calendarRunId: calendarItems[0]?.calendarRunId || undefined,
           itemCount: 6,
+          manualTopics: fromLines(manualTopics),
         }),
       });
       const payload = await response.json();
@@ -773,7 +904,7 @@ export default function StudioCmoPage() {
         Array.isArray(payload.latestItems) ? payload.latestItems : [],
       );
       await refreshDrafts();
-      toast({ title: "Briefs gerados", description: "Direcionamentos editoriais salvos no backend." });
+      toast({ title: "Pautas geradas", description: "Direcionamentos editoriais mais especÃ­ficos foram salvos no backend." });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro ao gerar briefs.";
       setBriefsError(message);
@@ -841,7 +972,7 @@ export default function StudioCmoPage() {
       await refreshDrafts();
       toast({
         title: "Brief enviado para a agenda",
-        description: "Item criado no calendário do Studio.",
+        description: "Item criado no calendÃ¡rio do Studio.",
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro ao enviar brief para a agenda.";
@@ -885,7 +1016,7 @@ export default function StudioCmoPage() {
             CMO
           </h1>
           <p className="text-secondary-dark dark:text-secondary-light">
-            Fluxo inicial do Marketing Director para a organização {orgId}.
+            Fluxo inicial do Marketing Director para a organizaÃ§Ã£o {orgId}.
           </p>
         </div>
 
@@ -931,7 +1062,43 @@ export default function StudioCmoPage() {
           </div>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => jumpToSection("diagnostico")}
+            className={`rounded border px-3 py-1 text-xs transition ${
+              activeSection === "diagnostico"
+                ? "border-highlight-light text-highlight-light bg-secondary-light/20 dark:border-highlight-dark dark:text-highlight-dark dark:bg-secondary-dark/30"
+                : "border-secondary-dark/30 text-secondary-dark hover:bg-secondary-light/20 dark:border-secondary-light/30 dark:text-secondary-light dark:hover:bg-secondary-dark/30"
+            }`}
+          >
+            DiagnÃ³stico
+          </button>
+          <button
+            type="button"
+            onClick={() => jumpToSection("pautas")}
+            className={`rounded border px-3 py-1 text-xs transition ${
+              activeSection === "pautas"
+                ? "border-highlight-light text-highlight-light bg-secondary-light/20 dark:border-highlight-dark dark:text-highlight-dark dark:bg-secondary-dark/30"
+                : "border-secondary-dark/30 text-secondary-dark hover:bg-secondary-light/20 dark:border-secondary-light/30 dark:text-secondary-light dark:hover:bg-secondary-dark/30"
+            }`}
+          >
+            Pautas
+          </button>
+          <button
+            type="button"
+            onClick={() => jumpToSection("revisao")}
+            className={`rounded border px-3 py-1 text-xs transition ${
+              activeSection === "revisao"
+                ? "border-highlight-light text-highlight-light bg-secondary-light/20 dark:border-highlight-dark dark:text-highlight-dark dark:bg-secondary-dark/30"
+                : "border-secondary-dark/30 text-secondary-dark hover:bg-secondary-light/20 dark:border-secondary-light/30 dark:text-secondary-light dark:hover:bg-secondary-dark/30"
+            }`}
+          >
+            RevisÃ£o
+          </button>
+        </div>
+
+        <section id="cmo-diagnostico" className="grid gap-4 lg:grid-cols-2">
           <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-secondary-light/10 dark:bg-secondary-dark/20 p-4 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-highlight-light dark:text-highlight-dark">
@@ -951,9 +1118,9 @@ export default function StudioCmoPage() {
               <Field label="Posicionamento" value={companyProfile.positioning} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, positioning: value }))} />
               <Field label="Proposta de valor" value={companyProfile.valueProposition} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, valueProposition: value }))} />
               <Field label="Tom preferido" value={companyProfile.preferredTone} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, preferredTone: value }))} />
-              <TextAreaField label="Público-alvo" value={profileFormValue.audience} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, audience: fromLines(value) }))} />
-              <TextAreaField label="Segmentos de atuação" value={profileFormValue.marketSegment} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, marketSegment: fromLines(value) }))} />
-              <TextAreaField label="Regiões atendidas" value={profileFormValue.regions} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, regions: fromLines(value) }))} />
+              <TextAreaField label="PÃºblico-alvo" value={profileFormValue.audience} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, audience: fromLines(value) }))} />
+              <TextAreaField label="Segmentos de atuaÃ§Ã£o" value={profileFormValue.marketSegment} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, marketSegment: fromLines(value) }))} />
+              <TextAreaField label="RegiÃµes atendidas" value={profileFormValue.regions} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, regions: fromLines(value) }))} />
               <TextAreaField label="Assuntos proibidos" value={profileFormValue.forbiddenTopics} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, forbiddenTopics: fromLines(value) }))} />
               <TextAreaField label="Assuntos preferenciais" value={profileFormValue.preferredTopics} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, preferredTopics: fromLines(value) }))} />
               <TextAreaField label="Objetivos comerciais" value={profileFormValue.commercialGoals} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, commercialGoals: fromLines(value) }))} />
@@ -975,7 +1142,7 @@ export default function StudioCmoPage() {
                 disabled={analyzingPortfolio}
                 className="rounded border border-secondary-dark/30 px-4 py-2 text-sm transition hover:bg-secondary-light/20 dark:border-secondary-light/30"
               >
-                {analyzingPortfolio ? "Analisando..." : "Analisar portfólio"}
+                {analyzingPortfolio ? "Analisando..." : "Analisar portfÃ³lio"}
               </button>
               <button
                 type="button"
@@ -991,7 +1158,7 @@ export default function StudioCmoPage() {
           <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-secondary-light/10 dark:bg-secondary-dark/20 p-4 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-highlight-light dark:text-highlight-dark">
-                Estratégia
+                EstratÃ©gia
               </h2>
               <span className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
                 Draft persistido no backend
@@ -999,7 +1166,7 @@ export default function StudioCmoPage() {
             </div>
 
             <div className="grid gap-3">
-              <Field label="Período" value={period} onChange={setPeriod} />
+              <Field label="PerÃ­odo" value={period} onChange={setPeriod} />
               <TextAreaField label="Objetivo" value={objective} onChange={setObjective} />
             </div>
 
@@ -1018,27 +1185,243 @@ export default function StudioCmoPage() {
                 disabled={generatingCalendar || !strategy?.id}
                 className="rounded border border-secondary-dark/30 px-4 py-2 text-sm transition hover:bg-secondary-light/20 dark:border-secondary-light/30 disabled:opacity-60"
               >
-                {generatingCalendar ? "Gerando..." : "Gerar calendário"}
+                {generatingCalendar ? "Gerando..." : "Gerar calendÃ¡rio"}
               </button>
               <button
                 type="button"
                 onClick={() => void generateBriefs()}
-                disabled={generatingBriefs || !strategy?.id}
+                disabled={generatingBriefs || !briefGenerationReady}
                 className="rounded border border-secondary-dark/30 px-4 py-2 text-sm transition hover:bg-secondary-light/20 dark:border-secondary-light/30 disabled:opacity-60"
               >
-                {generatingBriefs ? "Gerando..." : "Gerar briefs"}
+                {generatingBriefs ? "Gerando..." : "Gerar pautas + briefs"}
               </button>
+            </div>
+            <div
+              id="cmo-pautas"
+              className="space-y-3 rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                    Pautas por origem
+                  </div>
+                  <p className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                    A IA puxa do calendário; o usuário injeta pautas próprias para contaminar a estratégia com contexto real.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={appendAllAiSuggestions}
+                  disabled={!aiTopicSuggestions.length}
+                  className="rounded border border-highlight-light px-3 py-1 text-xs font-semibold text-highlight-light transition hover:bg-secondary-light/20 disabled:opacity-60"
+                >
+                  Usar sugestões IA
+                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActivePautaView("ia")}
+                    className={`rounded border px-3 py-1 text-xs transition ${
+                      activePautaView === "ia"
+                        ? "border-highlight-light text-highlight-light bg-secondary-light/20 dark:border-highlight-dark dark:text-highlight-dark dark:bg-secondary-dark/30"
+                        : "border-secondary-dark/30 text-secondary-dark hover:bg-secondary-light/20 dark:border-secondary-light/30 dark:text-secondary-light dark:hover:bg-secondary-dark/30"
+                    }`}
+                  >
+                    Pautas IA ({pautaIaItems.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePautaView("usuario")}
+                    className={`rounded border px-3 py-1 text-xs transition ${
+                      activePautaView === "usuario"
+                        ? "border-highlight-light text-highlight-light bg-secondary-light/20 dark:border-highlight-dark dark:text-highlight-dark dark:bg-secondary-dark/30"
+                        : "border-secondary-dark/30 text-secondary-dark hover:bg-secondary-light/20 dark:border-secondary-light/30 dark:text-secondary-light dark:hover:bg-secondary-dark/30"
+                    }`}
+                  >
+                    Pautas do usuário ({manualTopicSuggestions.length || pautaUserItems.length})
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                      Sugestões IA
+                    </div>
+                    <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                      Tópicos derivados do perfil, da estratégia e do calendário. Clique para levar ao bloco do usuário.
+                    </div>
+                  </div>
+                  <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                    {aiTopicSuggestions.length} sugestões
+                  </div>
+                </div>
+                {aiTopicSuggestions.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {aiTopicSuggestions.map((topic, index) => (
+                      <button
+                        key={`${topic}-${index}`}
+                        type="button"
+                        onClick={() => appendTopicToManualTopics(topic)}
+                        className="rounded-full border border-secondary-dark/20 px-3 py-1 text-xs text-secondary-dark transition hover:bg-secondary-light/20 dark:border-secondary-light/20 dark:text-secondary-light"
+                      >
+                        + {topic}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                    Complete o perfil, a estratégia e o calendário para gerar sugestões mais úteis.
+                  </div>
+                )}
+              </div>
+
+              {activePautaView === "ia" ? (
+                <div className="space-y-3">
+                  <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                      Pautas IA
+                    </div>
+                    <div className="text-sm text-secondary-dark dark:text-secondary-light">
+                      Pautas derivadas do calendário editorial e da estratégia. São as pautas que a máquina já entende como prioritárias.
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {pautaIaItems.length ? (
+                      pautaIaItems.map((brief, index) => (
+                        <div
+                          key={brief.id || `${brief.briefRunId || "brief"}-${brief.title || "untitled"}-${brief.period || "no-period"}-${index}`}
+                          className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 p-3 space-y-2"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="space-y-1">
+                              <div className="font-medium text-secondary-dark dark:text-secondary-light">
+                                {brief.title || "Brief sem titulo"}
+                              </div>
+                              <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                                {brief.channel || "blog"} - {brief.status || "draft"} - {" "}
+                                {brief.scheduledAt || "sem data"}
+                              </div>
+                              <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                                {brief.editorialQuestion || brief.objective || "Sem pergunta editorial definida."}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openBriefEdit(brief)}
+                              className="rounded border border-secondary-dark/30 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/30"
+                            >
+                              Editar brief
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                        Nenhuma pauta IA gerada ainda.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                      Pautas do usuário
+                    </div>
+                    <div className="text-sm text-secondary-dark dark:text-secondary-light">
+                      Insira aqui os temas que o CMO deve respeitar. Eles entram na geração junto com o calendário.
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                      Uma pauta por linha. Use linguagem de negócio, não palavras soltas.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setManualTopics(
+                          [
+                            "Upgrade residencial em bairros nobres",
+                            "Comparativo entre empreendimentos premium",
+                            "Como analisar um lançamento sem cair em hype",
+                          ].join("\n"),
+                        )
+                      }
+                      className="rounded border border-secondary-dark/20 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/20"
+                    >
+                      Usar exemplos
+                    </button>
+                  </div>
+                  <TextAreaField
+                    label="Pautas sugeridas"
+                    value={manualTopics}
+                    onChange={setManualTopics}
+                    rows={5}
+                  />
+                  <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                      Pré-visualização
+                    </div>
+                    {manualTopicSuggestions.length ? (
+                      <ul className="space-y-1 text-sm text-secondary-dark dark:text-secondary-light">
+                        {manualTopicSuggestions.map((topic, index) => (
+                          <li key={`${topic}-${index}`} className="rounded border border-secondary-dark/10 px-2 py-1">
+                            {topic}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                        Nenhuma pauta sugerida pelo usuário ainda.
+                      </div>
+                    )}
+                  </div>
+                  {pautaUserItems.length ? (
+                    <div className="space-y-2">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                        Briefs manuais já gerados
+                      </div>
+                      {pautaUserItems.map((brief, index) => (
+                        <div
+                          key={brief.id || `${brief.briefRunId || "manual"}-${brief.title || "untitled"}-${index}`}
+                          className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 p-3 space-y-2"
+                        >
+                          <div className="font-medium text-secondary-dark dark:text-secondary-light">
+                            {brief.title || "Brief sem titulo"}
+                          </div>
+                          <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                            {brief.manualTopic || brief.scope || "Pauta-base sem detalhamento."}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3 space-y-2">
                 <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
-                  Estado
+                  Gate de qualidade
                 </div>
-                <div className="text-sm text-secondary-dark dark:text-secondary-light">
-                  {briefItems.length
-                    ? `${briefItems.length} briefs prontos para revisao`
-                    : "Ainda nao ha briefs. Gere a agenda primeiro."}
-                </div>
+                {briefGenerationReady ? (
+                  <div className="text-sm text-secondary-dark dark:text-secondary-light">
+                    Contexto suficiente para gerar briefs com menos ruído.
+                  </div>
+                ) : (
+                  <div className="space-y-2 text-sm text-secondary-dark dark:text-secondary-light">
+                    <div>Bloqueado até resolver os pontos abaixo:</div>
+                    <ul className="space-y-1 text-xs text-secondary-dark/80 dark:text-secondary-light/80">
+                      {briefGenerationIssues.map((issue) => (
+                        <li key={issue} className="rounded border border-secondary-dark/10 px-2 py-1">
+                          {issue}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
               <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3 space-y-2">
                 <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
@@ -1046,7 +1429,7 @@ export default function StudioCmoPage() {
                 </div>
                 <div className="text-sm text-secondary-dark dark:text-secondary-light">
                   {strategy?.id
-                    ? "Gerar calendario e briefs a partir da estrategia."
+                    ? "Misturar o calendÃ¡rio com pautas sugeridas e gerar briefs mais especÃ­ficos."
                     : "Gerar o plano CMO antes de seguir."}
                 </div>
               </div>
@@ -1076,18 +1459,18 @@ export default function StudioCmoPage() {
               </div>
             </details>
 
-            <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3 space-y-3">
+            <div id="cmo-revisao" className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-highlight-light dark:text-highlight-dark">
-                  Briefs em revisao
+                  Pautas em revisÃ£o
                 </div>
                 <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                  Editar brief, gerar texto e enviar para a agenda
+                  Editar pauta, gerar texto e enviar para a agenda
                 </div>
               </div>
               {briefsError ? (
                 <div className="rounded border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-700 dark:text-red-300">
-                  <div className="font-semibold">Erro ao gerar briefs</div>
+                  <div className="font-semibold">Erro ao gerar pautas</div>
                   <pre className="mt-2 whitespace-pre-wrap break-words">{briefsError}</pre>
                 </div>
               ) : null}
@@ -1148,7 +1531,7 @@ export default function StudioCmoPage() {
                   ))
                 ) : (
                   <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                    Nenhum brief gerado ainda.
+                    Nenhuma pauta gerada ainda.
                   </div>
                 )}
               </div>
@@ -1187,10 +1570,12 @@ function TextAreaField({
   label,
   value,
   onChange,
+  rows = 3,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  rows?: number;
 }) {
   return (
     <label className="space-y-1">
@@ -1200,7 +1585,7 @@ function TextAreaField({
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        rows={3}
+        rows={rows}
         className="w-full rounded border border-secondary-dark/30 dark:border-secondary-light/30 bg-transparent px-3 py-2 text-sm"
       />
     </label>
@@ -1214,11 +1599,12 @@ function ReadOnlyJson({ title, value }: { title: string; value: unknown }) {
         {title}
       </div>
       <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-secondary-dark dark:text-secondary-light">
-        {formatJson(value) || "—"}
+        {formatJson(value) || "â€”"}
       </pre>
     </div>
   );
 }
+
 
 
 
