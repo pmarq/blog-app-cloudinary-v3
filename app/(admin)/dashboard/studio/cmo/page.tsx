@@ -400,7 +400,7 @@ export default function StudioCmoPage() {
 
   const [period, setPeriod] = useState("2026-06");
   const [objective, setObjective] = useState(
-    "aumentar leads qualificados para alto padrÃ£o em SÃ£o Paulo",
+    "aumentar leads qualificados para alto padrão em São Paulo",
   );
 
   const profileFormValue = useMemo(
@@ -524,7 +524,7 @@ export default function StudioCmoPage() {
   const getToken = async () => {
     const token = await auth.currentUser?.getIdToken(true);
     if (!token) {
-      throw new Error("SessÃ£o necessÃ¡ria. FaÃ§a login novamente.");
+      throw new Error("Sessão necessária. Faça login novamente.");
     }
     return token;
   };
@@ -580,10 +580,10 @@ export default function StudioCmoPage() {
         throw new Error(opportunitiesPayload?.message || "Falha ao carregar oportunidades.");
       }
       if (!strategiesResponse.ok || !strategiesPayload?.ok) {
-        throw new Error(strategiesPayload?.message || "Falha ao carregar estratÃ©gias.");
+        throw new Error(strategiesPayload?.message || "Falha ao carregar estratégias.");
       }
       if (!calendarResponse.ok || !calendarPayload?.ok) {
-        throw new Error(calendarPayload?.message || "Falha ao carregar calendÃ¡rio.");
+        throw new Error(calendarPayload?.message || "Falha ao carregar calendário.");
       }
       if (!briefsResponse.ok || !briefsPayload?.ok) {
         throw new Error(briefsPayload?.message || "Falha ao carregar briefs.");
@@ -750,13 +750,13 @@ export default function StudioCmoPage() {
       });
       const payload = await response.json();
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.message || "Falha ao analisar portfÃ³lio.");
+        throw new Error(payload?.message || "Falha ao analisar portfólio.");
       }
       setPortfolioSnapshot(payload.latestPortfolioSnapshot || null);
       await refreshDrafts();
-      toast({ title: "PortfÃ³lio analisado", description: "Snapshot atualizado." });
+      toast({ title: "Portfólio analisado", description: "Snapshot atualizado." });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Erro ao analisar portfÃ³lio.";
+      const message = error instanceof Error ? error.message : "Erro ao analisar portfólio.";
       toast({ title: "Erro", description: message, variant: "destructive" });
     } finally {
       setAnalyzingPortfolio(false);
@@ -813,13 +813,13 @@ export default function StudioCmoPage() {
       });
       const payload = await response.json();
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.message || "Falha ao gerar estratÃ©gia.");
+        throw new Error(payload?.message || "Falha ao gerar estratégia.");
       }
       setStrategy(payload.latestStrategy || null);
       await refreshDrafts();
-      toast({ title: "EstratÃ©gia gerada", description: "Plano CMO salvo no backend." });
+      toast({ title: "Estratégia gerada", description: "Plano CMO salvo no backend." });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Erro ao gerar estratÃ©gia.";
+      const message = error instanceof Error ? error.message : "Erro ao gerar estratégia.";
       toast({ title: "Erro", description: message, variant: "destructive" });
     } finally {
       setGeneratingStrategy(false);
@@ -845,7 +845,7 @@ export default function StudioCmoPage() {
       });
       const payload = await response.json();
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.message || "Falha ao gerar calendÃ¡rio.");
+        throw new Error(payload?.message || "Falha ao gerar calendário.");
       }
       setCalendarItems(
         Array.isArray(payload.latestCalendar?.items)
@@ -853,9 +853,9 @@ export default function StudioCmoPage() {
           : [],
       );
       await refreshDrafts();
-      toast({ title: "CalendÃ¡rio gerado", description: "Pautas editoriais salvas no backend." });
+      toast({ title: "Calendário gerado", description: "Pautas editoriais salvas no backend." });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Erro ao gerar calendÃ¡rio.";
+      const message = error instanceof Error ? error.message : "Erro ao gerar calendário.";
       toast({ title: "Erro", description: message, variant: "destructive" });
     } finally {
       setGeneratingCalendar(false);
@@ -904,7 +904,7 @@ export default function StudioCmoPage() {
         Array.isArray(payload.latestItems) ? payload.latestItems : [],
       );
       await refreshDrafts();
-      toast({ title: "Pautas geradas", description: "Direcionamentos editoriais mais especÃ­ficos foram salvos no backend." });
+      toast({ title: "Pautas geradas", description: "Direcionamentos editoriais mais específicos foram salvos no backend." });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro ao gerar briefs.";
       setBriefsError(message);
@@ -972,7 +972,7 @@ export default function StudioCmoPage() {
       await refreshDrafts();
       toast({
         title: "Brief enviado para a agenda",
-        description: "Item criado no calendÃ¡rio do Studio.",
+        description: "Item criado no calendário do Studio.",
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro ao enviar brief para a agenda.";
@@ -1001,6 +1001,10 @@ export default function StudioCmoPage() {
       briefChannel: brief.channel || "",
       briefTheme: brief.theme || "",
       briefScope: brief.scope || "",
+      briefEditorialQuestion: brief.editorialQuestion || "",
+      briefWhyNow: brief.whyNow || "",
+      briefContentFormat: brief.contentFormat || "",
+      briefSourceType: brief.sourceType || "",
     });
 
     router.push(`/dashboard/studio/cmo/draft?${searchParams.toString()}`);
@@ -1016,7 +1020,7 @@ export default function StudioCmoPage() {
             CMO
           </h1>
           <p className="text-secondary-dark dark:text-secondary-light">
-            Fluxo inicial do Marketing Director para a organizaÃ§Ã£o {orgId}.
+            Fluxo inicial do Marketing Director para a organização {orgId}.
           </p>
         </div>
 
@@ -1072,7 +1076,7 @@ export default function StudioCmoPage() {
                 : "border-secondary-dark/30 text-secondary-dark hover:bg-secondary-light/20 dark:border-secondary-light/30 dark:text-secondary-light dark:hover:bg-secondary-dark/30"
             }`}
           >
-            DiagnÃ³stico
+            Diagnóstico
           </button>
           <button
             type="button"
@@ -1094,7 +1098,7 @@ export default function StudioCmoPage() {
                 : "border-secondary-dark/30 text-secondary-dark hover:bg-secondary-light/20 dark:border-secondary-light/30 dark:text-secondary-light dark:hover:bg-secondary-dark/30"
             }`}
           >
-            RevisÃ£o
+            Revisão
           </button>
         </div>
 
@@ -1118,9 +1122,9 @@ export default function StudioCmoPage() {
               <Field label="Posicionamento" value={companyProfile.positioning} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, positioning: value }))} />
               <Field label="Proposta de valor" value={companyProfile.valueProposition} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, valueProposition: value }))} />
               <Field label="Tom preferido" value={companyProfile.preferredTone} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, preferredTone: value }))} />
-              <TextAreaField label="PÃºblico-alvo" value={profileFormValue.audience} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, audience: fromLines(value) }))} />
-              <TextAreaField label="Segmentos de atuaÃ§Ã£o" value={profileFormValue.marketSegment} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, marketSegment: fromLines(value) }))} />
-              <TextAreaField label="RegiÃµes atendidas" value={profileFormValue.regions} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, regions: fromLines(value) }))} />
+              <TextAreaField label="Público-alvo" value={profileFormValue.audience} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, audience: fromLines(value) }))} />
+              <TextAreaField label="Segmentos de atuação" value={profileFormValue.marketSegment} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, marketSegment: fromLines(value) }))} />
+              <TextAreaField label="Regiões atendidas" value={profileFormValue.regions} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, regions: fromLines(value) }))} />
               <TextAreaField label="Assuntos proibidos" value={profileFormValue.forbiddenTopics} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, forbiddenTopics: fromLines(value) }))} />
               <TextAreaField label="Assuntos preferenciais" value={profileFormValue.preferredTopics} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, preferredTopics: fromLines(value) }))} />
               <TextAreaField label="Objetivos comerciais" value={profileFormValue.commercialGoals} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, commercialGoals: fromLines(value) }))} />
@@ -1142,7 +1146,7 @@ export default function StudioCmoPage() {
                 disabled={analyzingPortfolio}
                 className="rounded border border-secondary-dark/30 px-4 py-2 text-sm transition hover:bg-secondary-light/20 dark:border-secondary-light/30"
               >
-                {analyzingPortfolio ? "Analisando..." : "Analisar portfÃ³lio"}
+                {analyzingPortfolio ? "Analisando..." : "Analisar portfólio"}
               </button>
               <button
                 type="button"
@@ -1158,7 +1162,7 @@ export default function StudioCmoPage() {
           <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-secondary-light/10 dark:bg-secondary-dark/20 p-4 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-highlight-light dark:text-highlight-dark">
-                EstratÃ©gia
+                Estratégia
               </h2>
               <span className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
                 Draft persistido no backend
@@ -1166,7 +1170,7 @@ export default function StudioCmoPage() {
             </div>
 
             <div className="grid gap-3">
-              <Field label="PerÃ­odo" value={period} onChange={setPeriod} />
+              <Field label="Período" value={period} onChange={setPeriod} />
               <TextAreaField label="Objetivo" value={objective} onChange={setObjective} />
             </div>
 
@@ -1185,7 +1189,7 @@ export default function StudioCmoPage() {
                 disabled={generatingCalendar || !strategy?.id}
                 className="rounded border border-secondary-dark/30 px-4 py-2 text-sm transition hover:bg-secondary-light/20 dark:border-secondary-light/30 disabled:opacity-60"
               >
-                {generatingCalendar ? "Gerando..." : "Gerar calendÃ¡rio"}
+                {generatingCalendar ? "Gerando..." : "Gerar calendário"}
               </button>
               <button
                 type="button"
@@ -1429,7 +1433,7 @@ export default function StudioCmoPage() {
                 </div>
                 <div className="text-sm text-secondary-dark dark:text-secondary-light">
                   {strategy?.id
-                    ? "Misturar o calendÃ¡rio com pautas sugeridas e gerar briefs mais especÃ­ficos."
+                    ? "Misturar o calendário com pautas sugeridas e gerar briefs mais específicos."
                     : "Gerar o plano CMO antes de seguir."}
                 </div>
               </div>
@@ -1462,7 +1466,7 @@ export default function StudioCmoPage() {
             <div id="cmo-revisao" className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-highlight-light dark:text-highlight-dark">
-                  Pautas em revisÃ£o
+                  Pautas em revisão
                 </div>
                 <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
                   Editar pauta, gerar texto e enviar para a agenda
