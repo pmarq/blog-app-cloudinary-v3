@@ -20,6 +20,37 @@ type GeneratedContent = {
   };
 };
 
+type BriefSourceSignals = {
+  portfolioRegions?: string[];
+  portfolioCities?: string[];
+  portfolioSegments?: string[];
+  opportunityTitles?: string[];
+  opportunityScopes?: string[];
+  opportunityRegions?: string[];
+  calendarTitle?: string;
+  calendarScope?: string;
+  calendarTheme?: string;
+  calendarAngle?: string;
+  strategyPillars?: string[];
+};
+
+type BriefContext = {
+  id?: string;
+  title?: string;
+  channel?: string;
+  theme?: string | null;
+  scope?: string | null;
+  objective?: string;
+  angle?: string;
+  cta?: string;
+  sourceType?: string | null;
+  editorialQuestion?: string | null;
+  whyNow?: string | null;
+  contentFormat?: string | null;
+  manualTopic?: string | null;
+  sourceSignals?: BriefSourceSignals | null;
+};
+
 type SearchParamsValue = Record<string, string | string[] | undefined>;
 
 type DraftClientProps = {
@@ -39,6 +70,22 @@ function slugify(value: string): string {
 function firstValue(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] || "";
   return value || "";
+}
+
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(normalized);
+  }
+
+  return output;
 }
 
 export default function DraftClient({ initialSearchParams }: DraftClientProps) {
@@ -64,6 +111,7 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [content, setContent] = useState<GeneratedContent | null>(null);
+  const [briefContext, setBriefContext] = useState<BriefContext | null>(null);
   const [meta, setMeta] = useState<{
     channel?: string | null;
     model?: string | null;
@@ -157,6 +205,28 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
     }
   }, [briefId, getToken, orgId]);
 
+  const loadBriefContext = useCallback(async (): Promise<void> => {
+    if (!briefId) return;
+
+    try {
+      const token = await getToken();
+      const response = await fetch(
+        withBasePath(`/api/studio/cmo/briefs/${encodeURIComponent(briefId)}?orgId=${encodeURIComponent(orgId || "")}`),
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.ok) return;
+      setBriefContext(payload.brief || null);
+    } catch {
+      // Keep the editor usable even if context loading fails.
+    }
+  }, [briefId, getToken, orgId]);
+
   const generateContent = useCallback(async () => {
     if (!briefId) {
       setError("briefId ausente.");
@@ -217,6 +287,7 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
     let cancelled = false;
 
     void (async () => {
+      await loadBriefContext();
       const hasExisting = await loadExistingContent();
       if (cancelled || hasExisting || autoGenerateRef.current) return;
       autoGenerateRef.current = true;
@@ -226,7 +297,7 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
     return () => {
       cancelled = true;
     };
-  }, [briefId, generateContent, loadExistingContent]);
+  }, [briefId, generateContent, loadBriefContext, loadExistingContent]);
 
   const openInEditor = useCallback(() => {
     const title = content?.title || briefTitle || "Rascunho editorial";
@@ -298,6 +369,57 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
               ))}
             </div>
           ) : null}
+
+          <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                Origem do brief
+              </div>
+              <div className="text-[11px] text-secondary-dark/60 dark:text-secondary-light/60">
+                {briefContext?.sourceType ? `Origem: ${briefContext.sourceType}` : briefSourceType ? `Origem: ${briefSourceType}` : "Origem: calend?rio"}
+              </div>
+            </div>
+            {uniqueStrings([
+              ...(briefContext?.sourceSignals?.calendarTitle ? [briefContext.sourceSignals.calendarTitle] : []),
+              ...(briefContext?.sourceSignals?.calendarScope ? [briefContext.sourceSignals.calendarScope] : []),
+              ...(briefContext?.sourceSignals?.calendarTheme ? [briefContext.sourceSignals.calendarTheme] : []),
+              ...(briefContext?.sourceSignals?.portfolioRegions || []),
+              ...(briefContext?.sourceSignals?.portfolioCities || []),
+              ...(briefContext?.sourceSignals?.portfolioSegments || []),
+              ...(briefContext?.sourceSignals?.opportunityTitles || []),
+              ...(briefContext?.sourceSignals?.opportunityScopes || []),
+              ...(briefContext?.sourceSignals?.opportunityRegions || []),
+              ...(briefContext?.sourceSignals?.strategyPillars || []),
+            ]).length ? (
+              <div className="flex flex-wrap gap-1.5">
+                {uniqueStrings([
+                  ...(briefContext?.sourceSignals?.calendarTitle ? [briefContext.sourceSignals.calendarTitle] : []),
+                  ...(briefContext?.sourceSignals?.calendarScope ? [briefContext.sourceSignals.calendarScope] : []),
+                  ...(briefContext?.sourceSignals?.calendarTheme ? [briefContext.sourceSignals.calendarTheme] : []),
+                  ...(briefContext?.sourceSignals?.portfolioRegions || []),
+                  ...(briefContext?.sourceSignals?.portfolioCities || []),
+                  ...(briefContext?.sourceSignals?.portfolioSegments || []),
+                  ...(briefContext?.sourceSignals?.opportunityTitles || []),
+                  ...(briefContext?.sourceSignals?.opportunityScopes || []),
+                  ...(briefContext?.sourceSignals?.opportunityRegions || []),
+                  ...(briefContext?.sourceSignals?.strategyPillars || []),
+                ])
+                  .slice(0, 8)
+                  .map((chip) => (
+                    <span
+                      key={`${briefId || "draft"}-${chip}`}
+                      className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5 text-[10px] text-secondary-dark/70 dark:text-secondary-light/70"
+                    >
+                      {chip}
+                    </span>
+                  ))}
+              </div>
+            ) : (
+              <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                Este rascunho n?o trouxe sinais persistidos de origem.
+              </div>
+            )}
+          </div>
 
           <div className="flex flex-wrap gap-2">
             <button

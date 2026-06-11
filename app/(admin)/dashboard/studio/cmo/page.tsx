@@ -116,6 +116,19 @@ type BriefItem = {
   manualTopic?: string | null;
   priority?: number | null;
   guardrails?: string[];
+  sourceSignals?: {
+    portfolioRegions?: string[];
+    portfolioCities?: string[];
+    portfolioSegments?: string[];
+    opportunityTitles?: string[];
+    opportunityScopes?: string[];
+    opportunityRegions?: string[];
+    calendarTitle?: string;
+    calendarScope?: string;
+    calendarTheme?: string;
+    calendarAngle?: string;
+    strategyPillars?: string[];
+  };
   requiredSources?: {
     kb?: boolean;
     web?: boolean;
@@ -167,40 +180,450 @@ function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return output;
 }
 
-function buildTopicSuggestionList({
+type EditorialSuggestionCategory = "Mercado" | "Produto" | "Autoridade" | "Indicadores";
+
+type EditorialSuggestion = {
+  id: string;
+  category: EditorialSuggestionCategory;
+  label: string;
+  rationale: string;
+  evidence: string[];
+};
+
+function normalizeLookupText(value: string): string {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function compactEvidence(values: string[]): string[] {
+  return uniqueStrings(values).slice(0, 4);
+}
+
+function buildTerritorialRanking(values: string[]): string[] {
+  const counts = new Map<string, number>();
+  const order: string[] = [];
+
+  for (const value of values) {
+    const normalized = normalizeLookupText(value);
+    if (!normalized || isPlaceholderTopic(normalized)) continue;
+
+    if (!counts.has(normalized)) {
+      counts.set(normalized, 0);
+      order.push(normalized);
+    }
+    counts.set(normalized, (counts.get(normalized) || 0) + 1);
+  }
+
+  return order
+    .map((value, index) => ({
+      value,
+      score: counts.get(value) || 0,
+      index,
+    }))
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map((entry) => entry.value);
+}
+
+function pickRankedValues(values: string[], startIndex: number, count: number): string[] {
+  const items = uniqueStrings(values).filter((value) => !isPlaceholderTopic(value));
+  if (!items.length || count <= 0) return [];
+
+  return Array.from({ length: Math.min(count, items.length) }, (_, index) => {
+    const position = startIndex + index;
+    return items[position % items.length];
+  });
+}
+
+function isPlaceholderTopic(value: string): boolean {
+  const text = normalizeLookupText(value);
+  if (!text) return true;
+
+  const bannedPhrases = [
+    "publico principal",
+    "objetivo principal",
+    "regioes prioritarias",
+    "segmentos de atuacao",
+    "mercado imobiliario de alto padrao",
+    "empreendimentos residenciais de alto padrao",
+    "pauta-base sem detalhamento",
+    "pauta base sem detalhamento",
+  ];
+
+  return bannedPhrases.some((phrase) => text.includes(phrase));
+}
+
+function isConcreteEditorialPhrase(value: string, anchors: string[]): boolean {
+  const text = normalizeLookupText(value);
+  if (!text || isPlaceholderTopic(value)) return false;
+
+  const concreteMarkers = [
+    "bairro",
+    "bairros",
+    "empreendimento",
+    "empreendimentos",
+    "projeto",
+    "projetos",
+    "lancamento",
+    "lancamentos",
+    "condominio",
+    "condominio-clube",
+    "incc",
+    "selic",
+    "juros",
+    "credito",
+    "b3",
+    "demanda",
+    "estoque",
+    "incorporadora",
+    "construtora",
+    "upgrade",
+    "comparativo",
+    "planta",
+    "patrimonial",
+    "premium",
+    "alto padrao",
+  ];
+
+  return (
+    concreteMarkers.some((marker) => text.includes(marker)) ||
+    anchors.some((anchor) => {
+      const normalizedAnchor = normalizeLookupText(anchor);
+      return Boolean(normalizedAnchor && text.includes(normalizedAnchor));
+    })
+  );
+}
+
+function titleCase(value: string): string {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .replace(/(^|\s)(\S)/g, (match) => match.toUpperCase());
+}
+
+function formatSignalLabel(value: string): string {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+  if (/^[A-Z0-9&/-]{2,}$/.test(trimmed.replace(/\s+/g, ""))) {
+    return trimmed.toUpperCase();
+  }
+  return titleCase(trimmed);
+}
+
+function buildEditorialSuggestions({
   companyProfile,
+  portfolioSnapshot,
+  opportunitySearch,
   strategy,
   calendarItems,
 }: {
   companyProfile: CompanyProfile;
+  portfolioSnapshot: PortfolioSnapshot | null;
+  opportunitySearch: MarketOpportunityPayload | null;
   strategy: StrategyPayload | null;
   calendarItems: CalendarItem[];
-}): string[] {
-  const firstAudience = companyProfile.audience[0] || strategy?.priorityAudiences?.[0] || "";
-  const firstRegion = companyProfile.regions[0] || strategy?.priorityRegions?.[0] || "";
-  const firstSegment = companyProfile.marketSegment[0] || "";
-  const firstPreferredTopic = companyProfile.preferredTopics[0] || strategy?.contentPillars?.[0] || "";
-  const firstGoal = companyProfile.commercialGoals[0] || strategy?.objective || "";
-  const firstSignal = strategy?.marketSignals?.[0] || "";
-  const firstCalendar = calendarItems[0];
-  const secondCalendar = calendarItems[1];
-  const firstCalendarTitle = firstCalendar?.title || firstCalendar?.theme || firstCalendar?.scope || "";
-  const secondCalendarTitle = secondCalendar?.title || secondCalendar?.theme || secondCalendar?.scope || "";
+}): EditorialSuggestion[] {
+  const suggestions: EditorialSuggestion[] = [];
+  const seen = new Set<string>();
 
-  return uniqueStrings([
-    firstPreferredTopic && firstAudience
-      ? `${firstPreferredTopic} para ${firstAudience}`
-      : null,
-    firstPreferredTopic && firstRegion
-      ? `${firstPreferredTopic} em ${firstRegion}`
-      : null,
-    firstGoal && firstSegment ? `Como gerar resultado com ${firstGoal} em ${firstSegment}` : null,
-    firstSignal && firstAudience ? `O que ${firstSignal} muda para ${firstAudience}` : null,
-    firstCalendarTitle && firstGoal ? `${firstCalendarTitle} com foco em ${firstGoal}` : null,
-    secondCalendarTitle && firstRegion ? `${secondCalendarTitle} pensando em ${firstRegion}` : null,
-    firstSegment ? `Checklist prático para ${firstSegment}` : null,
-    firstAudience ? `Erros comuns de conteúdo para ${firstAudience}` : null,
-  ]).slice(0, 8);
+  const addSuggestion = (
+    category: EditorialSuggestionCategory,
+    label: string,
+    rationale: string,
+    evidence: string[],
+  ) => {
+    const normalizedLabel = String(label || "").trim().replace(/\s+/g, " ");
+    if (!normalizedLabel || normalizedLabel.length < 18) return;
+    if (isPlaceholderTopic(normalizedLabel)) return;
+
+    const key = `${category}|${normalizeLookupText(normalizedLabel)}`;
+    if (seen.has(key)) return;
+
+    seen.add(key);
+    suggestions.push({
+      id: key,
+      category,
+      label: titleCase(normalizedLabel),
+      rationale,
+      evidence: compactEvidence(evidence),
+    });
+  };
+
+  const profileRegions = buildTerritorialRanking([
+    ...(companyProfile.regions || []),
+    ...(portfolioSnapshot?.mainNeighborhoods || []),
+    ...(portfolioSnapshot?.mainCities || []),
+  ]).filter((value) => {
+    const normalized = normalizeLookupText(value);
+    return (
+      normalized &&
+      !normalized.includes("prioritaria") &&
+      !normalized.includes("prioritarias") &&
+      !normalized.includes("ampliada") &&
+      !normalized.includes("ampliado")
+    );
+  });
+  const productSegments = uniqueStrings([
+    ...(portfolioSnapshot?.mainSegments || []),
+    ...(companyProfile.marketSegment || []),
+  ]).filter((value) => normalizeLookupText(value).length > 3);
+
+  const productAttributes = uniqueStrings([
+    ...(portfolioSnapshot?.commonAttributes || []),
+    ...(companyProfile.preferredTopics || []),
+    ...(strategy?.contentPillars || []),
+  ]).filter((value) => normalizeLookupText(value).length > 3);
+
+  const marketSignals = uniqueStrings(strategy?.marketSignals || []).filter(
+    (value) => normalizeLookupText(value).length > 1,
+  );
+
+  const marketOpportunities = uniqueStrings(
+    (opportunitySearch?.opportunities || []).flatMap((opportunity) => [
+      opportunity?.title || "",
+      opportunity?.scope || "",
+      ...(opportunity?.suggestedContents || []),
+    ]),
+  ).filter((value) =>
+    isConcreteEditorialPhrase(value, [
+      ...profileRegions,
+      ...productSegments,
+      ...marketSignals,
+    ]),
+  );
+
+  const calendarThemes = uniqueStrings(
+    calendarItems.flatMap((item) => [
+      item.title || "",
+      item.theme || "",
+      item.scope || "",
+      item.angle || "",
+      item.objective || "",
+    ]),
+  ).filter((value) =>
+    isConcreteEditorialPhrase(value, [
+      ...profileRegions,
+      ...productSegments,
+      ...marketSignals,
+    ]),
+  );
+
+  const segment =
+    productSegments.find((value) =>
+      /condominio|club|lancamento|boutique|alto padrao|premium|luxo|residencial|upgrade/i.test(
+        normalizeLookupText(value),
+      ),
+    ) || productSegments[0] || "empreendimentos premium";
+  const attribute =
+    productAttributes.find((value) =>
+      /condominio|club|lazer|servico|boutique|arquitetura|design|paisag|incc|estoque|demanda|preco|valor/i.test(
+        normalizeLookupText(value),
+      ),
+    ) || productAttributes[0] || "alto padrão";
+  const signal = marketSignals[0] || "";
+  const opportunity = marketOpportunities[0] || "";
+  const calendarTheme = calendarThemes[0] || "";
+
+  if (opportunity && profileRegions.length) {
+    const [regionA, regionB] = pickRankedValues(profileRegions, 0, 2);
+    addSuggestion(
+      "Mercado",
+      `O que ${opportunity} revela sobre ${regionA || "o mercado"} e ${regionB || regionA || "a região"}`,
+      "Cruza oportunidade de mercado com mais de um bairro real.",
+      [opportunity, regionA, regionB, ...(opportunitySearch?.queries || [])],
+    );
+  }
+
+  if (profileRegions.length >= 2) {
+    const [regionA, regionB] = pickRankedValues(profileRegions, 1, 2);
+    addSuggestion(
+      "Mercado",
+      `Comparativo entre ${regionA} e ${regionB} para empreendimentos premium`,
+      "Usa a disputa entre bairros reais como gancho editorial.",
+      [regionA, regionB, ...(portfolioSnapshot?.commonAttributes || [])],
+    );
+  }
+
+  if (profileRegions.length >= 3) {
+    const [regionA, regionB, regionC] = pickRankedValues(profileRegions, 2, 3);
+    addSuggestion(
+      "Mercado",
+      `Como ${regionA}, ${regionB} e ${regionC} ajudam a ler o mercado de alto padrão`,
+      "Distribui a leitura entre três bairros e evita um texto preso em uma única região.",
+      [regionA, regionB, regionC, ...(portfolioSnapshot?.commonAttributes || [])],
+    );
+  }
+
+  if (/condominio|club/i.test(normalizeLookupText(attribute)) && profileRegions.length) {
+    const [regionA] = pickRankedValues(profileRegions, 3, 1);
+    addSuggestion(
+      "Produto",
+      `5 projetos com ${attribute} em ${regionA}`,
+      "Transforma um diferencial do portfólio em pauta concreta.",
+      [attribute, regionA, ...(portfolioSnapshot?.commonAttributes || [])],
+    );
+  }
+
+  if (productSegments.length && profileRegions.length) {
+    const [regionA, regionB] = pickRankedValues(profileRegions, 4, 2);
+    addSuggestion(
+      "Produto",
+      `Como ler empreendimentos ${segment} em ${regionA} e ${regionB}`,
+      "Conecta segmento de produto com mais de uma região concreta do portfólio.",
+      [segment, regionA, regionB, ...(portfolioSnapshot?.mainSegments || [])],
+    );
+  }
+
+  if (portfolioSnapshot?.activeProductsCount && profileRegions.length) {
+    const [regionA, regionB] = pickRankedValues(profileRegions, 5, 2);
+    addSuggestion(
+      "Autoridade",
+      `O que o portfólio atual em ${uniqueStrings([regionA, regionB]).join(", ")} diz sobre a estratégia da Inlevor`,
+      "Usa a leitura do portfólio como peça de autoridade editorial.",
+      [
+        `Produtos ativos: ${portfolioSnapshot.activeProductsCount}`,
+        regionA,
+        regionB,
+        ...(portfolioSnapshot?.strategicSummary ? [portfolioSnapshot.strategicSummary] : []),
+      ],
+    );
+  }
+
+  if (
+    signal &&
+    /incc|selic|juros|credito|b3|estoque|demanda|lancamento/i.test(
+      normalizeLookupText(signal),
+    )
+  ) {
+    addSuggestion(
+      "Indicadores",
+      `${formatSignalLabel(signal)}: como isso afeta a compra de um imóvel premium`,
+      "Usa indicador real do plano/mercado como tema jornalístico.",
+      [signal, ...(strategy?.marketSignals || [])],
+    );
+  }
+
+  if (/incc/i.test(normalizeLookupText(signal)) || /incc/i.test(normalizeLookupText(calendarTheme))) {
+    addSuggestion(
+      "Indicadores",
+      "Como o INCC afeta a aquisição na planta",
+      "Tema clássico e útil para comprador de alto padrão.",
+      [signal || calendarTheme, ...(strategy?.marketSignals || [])],
+    );
+  }
+
+  if (
+    /b3|construtora|incorporadora|resultado|balanco|trimestre/i.test(
+      normalizeLookupText(signal || calendarTheme),
+    )
+  ) {
+    addSuggestion(
+      "Indicadores",
+      "O que os resultados das construtoras na B3 indicam para o setor",
+      "Traça um gancho de mercado com leitura financeira e setorial.",
+      [signal || calendarTheme, ...(strategy?.marketSignals || [])],
+    );
+  }
+
+  if (calendarTheme && profileRegions.length) {
+    const [regionA] = pickRankedValues(profileRegions, 6, 1);
+    addSuggestion(
+      "Autoridade",
+      `${calendarTheme} em ${regionA}: o que analisar antes de publicar`,
+      "Conecta o calendário editorial com uma região concreta.",
+      [calendarTheme, regionA, ...(calendarItems[0]?.relatedRegions || [])],
+    );
+  }
+
+  if (marketOpportunities.length >= 2) {
+    addSuggestion(
+      "Mercado",
+      `Os sinais mais fortes de mercado hoje entre ${marketOpportunities[0]} e ${marketOpportunities[1]}`,
+      "Gera pauta de análise cruzando oportunidades reais.",
+      [marketOpportunities[0], marketOpportunities[1]],
+    );
+  }
+
+  if (!suggestions.length) {
+    const fallbackTopic = profileRegions[0] || productSegments[0] || "mercado imobiliário de São Paulo";
+    addSuggestion(
+      "Autoridade",
+      `Como ler o mercado imobiliário de alto padrão em ${fallbackTopic}`,
+      "Fallback seguro quando ainda não há sinais específicos suficientes.",
+      [fallbackTopic],
+    );
+  }
+
+  return suggestions.slice(0, 8);
+}
+
+function groupSuggestionsByCategory(suggestions: EditorialSuggestion[]) {
+  const categories: EditorialSuggestionCategory[] = [
+    "Mercado",
+    "Produto",
+    "Autoridade",
+    "Indicadores",
+  ];
+
+  return categories.map((category) => ({
+    category,
+      items: suggestions.filter((suggestion) => suggestion.category === category),
+  }));
+}
+
+function getSuggestionChipText(suggestion: EditorialSuggestion): string {
+  return suggestion.label;
+}
+
+function getCalendarItemSourceLabel(
+  item: CalendarItem,
+  portfolioSnapshot: PortfolioSnapshot | null,
+  opportunitySearch: MarketOpportunityPayload | null,
+): string {
+  const itemRegions = uniqueStrings(item.relatedRegions || []);
+  const portfolioRegions = uniqueStrings([
+    ...(portfolioSnapshot?.mainNeighborhoods || []),
+    ...(portfolioSnapshot?.mainCities || []),
+  ]);
+  const opportunityRegions = uniqueStrings(
+    (opportunitySearch?.opportunities || []).flatMap((opportunity) => opportunity.relatedRegions || []),
+  );
+  const opportunityTitles = uniqueStrings(
+    (opportunitySearch?.opportunities || []).map((opportunity) => opportunity.title),
+  );
+
+  const parts: string[] = [];
+  if (itemRegions.some((region) => portfolioRegions.includes(region))) parts.push("portfólio");
+  const matchesOpportunityTitle =
+    Boolean(item.title) &&
+    opportunityTitles.some((title) =>
+      normalizeLookupText(item.title || "").includes(normalizeLookupText(title)),
+    );
+  if (itemRegions.some((region) => opportunityRegions.includes(region)) || matchesOpportunityTitle) {
+    parts.push("oportunidade");
+  }
+  if (!parts.length && item.theme) parts.push(item.theme);
+  return parts.length ? `Base: ${parts.join(" + ")}` : "Base: calendário/estratégia";
+}
+
+function getBriefSourceLabel(brief: BriefItem): string {
+  const signals = brief.sourceSignals;
+  if (!signals) {
+    return brief.sourceType === "manual" ? "Origem: usuário" : "Origem: calendário";
+  }
+
+  const parts: string[] = [];
+  if (signals.calendarTitle) parts.push("calendário");
+  if (signals.portfolioRegions?.length || signals.portfolioCities?.length || signals.portfolioSegments?.length) parts.push("portfólio");
+  if (signals.opportunityTitles?.length || signals.opportunityScopes?.length || signals.opportunityRegions?.length) parts.push("oportunidade");
+  if (signals.strategyPillars?.length) parts.push("estratégia");
+
+  if (!parts.length && brief.manualTopic) return "Origem: usuário + pauta manual";
+  return `Origem: ${uniqueStrings(parts).join(" + ") || "calendário"}`;
 }
 
 function formatJson(value: unknown): string {
@@ -450,13 +873,37 @@ export default function StudioCmoPage() {
   const manualTopicSuggestions = useMemo(() => fromLines(manualTopics), [manualTopics]);
   const aiTopicSuggestions = useMemo(
     () =>
-      buildTopicSuggestionList({
+      buildEditorialSuggestions({
         companyProfile,
+        portfolioSnapshot,
+        opportunitySearch,
         strategy,
         calendarItems,
-    }),
-    [calendarItems, companyProfile, strategy],
+      }),
+    [calendarItems, companyProfile, opportunitySearch, portfolioSnapshot, strategy],
   );
+  const aiTopicSuggestionGroups = useMemo(
+    () => groupSuggestionsByCategory(aiTopicSuggestions),
+    [aiTopicSuggestions],
+  );
+  const aiTopicSuggestionSummary = useMemo(() => {
+    const regionCount = uniqueStrings([
+      ...(companyProfile.regions || []),
+      ...(portfolioSnapshot?.mainNeighborhoods || []),
+      ...(portfolioSnapshot?.mainCities || []),
+    ]).length;
+    const opportunityCount = Array.isArray(opportunitySearch?.opportunities)
+      ? opportunitySearch.opportunities.length
+      : 0;
+    const signalCount = uniqueStrings([...(strategy?.marketSignals || [])]).length;
+    const calendarCount = calendarItems.length;
+    const segmentCount = uniqueStrings([
+      ...(portfolioSnapshot?.mainSegments || []),
+      ...(companyProfile.marketSegment || []),
+    ]).length;
+
+    return `${regionCount} regiões, ${segmentCount} segmentos, ${opportunityCount} oportunidades, ${signalCount} sinais e ${calendarCount} itens de calendário`;
+  }, [calendarItems.length, companyProfile.marketSegment, companyProfile.regions, opportunitySearch, portfolioSnapshot, strategy?.marketSignals]);
   const briefGenerationIssues = useMemo(() => {
     const issues: string[] = [];
 
@@ -481,7 +928,10 @@ export default function StudioCmoPage() {
   };
 
   const appendAllAiSuggestions = () => {
-    const nextTopics = uniqueStrings([...fromLines(manualTopics), ...aiTopicSuggestions]);
+    const nextTopics = uniqueStrings([
+      ...fromLines(manualTopics),
+      ...aiTopicSuggestions.map((suggestion) => suggestion.label),
+    ]);
     setManualTopics(nextTopics.join("\n"));
     setActivePautaView("usuario");
   };
@@ -808,6 +1258,7 @@ export default function StudioCmoPage() {
           period,
           objective,
           portfolioSnapshotId: portfolioSnapshot?.id || undefined,
+          opportunitySearchId: opportunitySearch?.id || undefined,
           marketOpportunityLimit: 5,
         }),
       });
@@ -840,6 +1291,8 @@ export default function StudioCmoPage() {
           orgId,
           strategyId: strategy?.id || undefined,
           period,
+          portfolioSnapshotId: portfolioSnapshot?.id || undefined,
+          opportunitySearchId: opportunitySearch?.id || undefined,
           itemCount: 8,
         }),
       });
@@ -886,6 +1339,8 @@ export default function StudioCmoPage() {
           orgId,
           strategyId: strategy?.id || undefined,
           calendarRunId: calendarItems[0]?.calendarRunId || undefined,
+          portfolioSnapshotId: portfolioSnapshot?.id || undefined,
+          opportunitySearchId: opportunitySearch?.id || undefined,
           itemCount: 6,
           manualTopics: fromLines(manualTopics),
         }),
@@ -1066,43 +1521,142 @@ export default function StudioCmoPage() {
           </div>
         </section>
 
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => jumpToSection("diagnostico")}
-            className={`rounded border px-3 py-1 text-xs transition ${
-              activeSection === "diagnostico"
-                ? "border-highlight-light text-highlight-light bg-secondary-light/20 dark:border-highlight-dark dark:text-highlight-dark dark:bg-secondary-dark/30"
-                : "border-secondary-dark/30 text-secondary-dark hover:bg-secondary-light/20 dark:border-secondary-light/30 dark:text-secondary-light dark:hover:bg-secondary-dark/30"
-            }`}
-          >
-            Diagnóstico
-          </button>
-          <button
-            type="button"
-            onClick={() => jumpToSection("pautas")}
-            className={`rounded border px-3 py-1 text-xs transition ${
-              activeSection === "pautas"
-                ? "border-highlight-light text-highlight-light bg-secondary-light/20 dark:border-highlight-dark dark:text-highlight-dark dark:bg-secondary-dark/30"
-                : "border-secondary-dark/30 text-secondary-dark hover:bg-secondary-light/20 dark:border-secondary-light/30 dark:text-secondary-light dark:hover:bg-secondary-dark/30"
-            }`}
-          >
-            Pautas
-          </button>
-          <button
-            type="button"
-            onClick={() => jumpToSection("revisao")}
-            className={`rounded border px-3 py-1 text-xs transition ${
-              activeSection === "revisao"
-                ? "border-highlight-light text-highlight-light bg-secondary-light/20 dark:border-highlight-dark dark:text-highlight-dark dark:bg-secondary-dark/30"
-                : "border-secondary-dark/30 text-secondary-dark hover:bg-secondary-light/20 dark:border-secondary-light/30 dark:text-secondary-light dark:hover:bg-secondary-dark/30"
-            }`}
-          >
-            Revisão
-          </button>
+        <div className="grid gap-2 md:grid-cols-3">
+          {[
+            {
+              key: "diagnostico",
+              title: "1. Diagnóstico",
+              description: "Perfil da marca, portfólio, oportunidades e estratégia.",
+            },
+            {
+              key: "pautas",
+              title: "2. Agenda",
+              description: "Pautas concretas geradas a partir dos sinais reais.",
+            },
+            {
+              key: "revisao",
+              title: "3. Revisão",
+              description: "Briefs, rascunho e envio para publicação.",
+            },
+          ].map((step) => {
+            const isActive = activeSection === step.key;
+            return (
+              <button
+                key={step.key}
+                type="button"
+                onClick={() => jumpToSection(step.key as "diagnostico" | "pautas" | "revisao")}
+                className={`rounded border p-3 text-left transition ${
+                  isActive
+                    ? "border-highlight-light bg-secondary-light/20 text-highlight-light dark:border-highlight-dark dark:bg-secondary-dark/30 dark:text-highlight-dark"
+                    : "border-secondary-dark/20 bg-white/20 text-secondary-dark hover:bg-secondary-light/20 dark:border-secondary-light/20 dark:bg-black/10 dark:text-secondary-light dark:hover:bg-secondary-dark/20"
+                }`}
+              >
+                <div className="text-xs font-semibold uppercase tracking-wide">{step.title}</div>
+                <div className="mt-1 text-xs opacity-80">{step.description}</div>
+              </button>
+            );
+          })} 
         </div>
 
-        <section id="cmo-diagnostico" className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/25 dark:bg-black/10 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                Etapa ativa
+              </div>
+              <div className="text-sm font-semibold text-secondary-dark dark:text-secondary-light">
+                {activeSection === "diagnostico"
+                  ? "Diagnóstico"
+                  : activeSection === "pautas"
+                    ? "Agenda"
+                    : "Revisão"}
+              </div>
+              <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                {activeSection === "diagnostico"
+                  ? "Preencha o contexto da marca para a IA sair do genérico."
+                  : activeSection === "pautas"
+                    ? "Veja as pautas geradas, ajuste o que estiver fraco e mantenha só o que fizer sentido."
+                    : "Revise briefs, abra rascunhos e envie os melhores para a agenda."}
+              </div>
+            </div>
+            <div className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-3 py-2 text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+              {activeSection === "diagnostico"
+                ? "Próximo: gerar estratégia"
+                : activeSection === "pautas"
+                  ? "Próximo: revisar briefs"
+                  : "Próximo: publicar ou editar"}
+            </div>
+          </div>
+        </div>
+
+        <section className="grid gap-3 lg:grid-cols-[1.4fr_0.9fr]">
+          <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-4 space-y-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                Como esse fluxo funciona
+              </div>
+              <div className="mt-1 text-sm text-secondary-dark/80 dark:text-secondary-light/80">
+                O Studio não gera conteúdo pronto de uma vez. Ele organiza contexto, monta agenda e só então libera a revisão.
+              </div>
+            </div>
+            <div className="grid gap-2 md:grid-cols-3">
+              {[
+                {
+                  title: "1. Diagnóstico",
+                  text: "Você alimenta perfil, portfólio, oportunidades e direção editorial.",
+                },
+                {
+                  title: "2. Agenda",
+                  text: "A IA gera pautas concretas com base nos sinais reais do negócio.",
+                },
+                {
+                  title: "3. Revisão",
+                  text: "Você aprova, edita, abre rascunho e envia para publicação.",
+                },
+              ].map((item) => (
+                <div
+                  key={item.title}
+                  className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-secondary-light/10 dark:bg-secondary-dark/20 p-3"
+                >
+                  <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                    {item.title}
+                  </div>
+                  <div className="mt-1 text-xs leading-5 text-secondary-dark/75 dark:text-secondary-light/75">
+                    {item.text}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded border border-highlight-light/30 bg-highlight-light/5 p-4 space-y-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                Depois de gerar pautas
+              </div>
+              <div className="mt-1 text-sm text-secondary-dark/80 dark:text-secondary-light/80">
+                O fluxo certo é revisar as pautas, editar o que fizer sentido e transformar as melhores em briefs.
+              </div>
+            </div>
+            <ol className="space-y-2 text-sm text-secondary-dark dark:text-secondary-light">
+              <li className="rounded border border-secondary-dark/10 dark:border-secondary-light/10 bg-white/30 dark:bg-black/10 px-3 py-2">
+                1. Revisar as pautas sugeridas.
+              </li>
+              <li className="rounded border border-secondary-dark/10 dark:border-secondary-light/10 bg-white/30 dark:bg-black/10 px-3 py-2">
+                2. Ajustar título, ângulo e objetivo.
+              </li>
+              <li className="rounded border border-secondary-dark/10 dark:border-secondary-light/10 bg-white/30 dark:bg-black/10 px-3 py-2">
+                3. Abrir o rascunho ou enviar para a agenda.
+              </li>
+            </ol>
+            <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+              Isso evita uma IA genérica e mantém a geração ancorada no contexto real do projeto.
+            </div>
+          </div>
+        </section>
+
+        {activeSection === "diagnostico" ? (
+          <section id="cmo-diagnostico" className="grid gap-4 lg:grid-cols-2">
           <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-secondary-light/10 dark:bg-secondary-dark/20 p-4 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-highlight-light dark:text-highlight-dark">
@@ -1123,13 +1677,21 @@ export default function StudioCmoPage() {
               <Field label="Proposta de valor" value={companyProfile.valueProposition} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, valueProposition: value }))} />
               <Field label="Tom preferido" value={companyProfile.preferredTone} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, preferredTone: value }))} />
               <TextAreaField label="Público-alvo" value={profileFormValue.audience} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, audience: fromLines(value) }))} />
-              <TextAreaField label="Segmentos de atuação" value={profileFormValue.marketSegment} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, marketSegment: fromLines(value) }))} />
-              <TextAreaField label="Regiões atendidas" value={profileFormValue.regions} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, regions: fromLines(value) }))} />
-              <TextAreaField label="Assuntos proibidos" value={profileFormValue.forbiddenTopics} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, forbiddenTopics: fromLines(value) }))} />
-              <TextAreaField label="Assuntos preferenciais" value={profileFormValue.preferredTopics} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, preferredTopics: fromLines(value) }))} />
               <TextAreaField label="Objetivos comerciais" value={profileFormValue.commercialGoals} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, commercialGoals: fromLines(value) }))} />
-              <TextAreaField label="Canais" value={profileFormValue.channels} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, channels: fromLines(value) }))} />
             </div>
+
+            <details className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/30 dark:bg-black/10 p-3">
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                Campos avançados
+              </summary>
+              <div className="mt-3 grid gap-3">
+                <TextAreaField label="Segmentos de atuação" value={profileFormValue.marketSegment} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, marketSegment: fromLines(value) }))} />
+                <TextAreaField label="Regiões atendidas" value={profileFormValue.regions} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, regions: fromLines(value) }))} />
+                <TextAreaField label="Assuntos proibidos" value={profileFormValue.forbiddenTopics} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, forbiddenTopics: fromLines(value) }))} />
+                <TextAreaField label="Assuntos preferenciais" value={profileFormValue.preferredTopics} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, preferredTopics: fromLines(value) }))} />
+                <TextAreaField label="Canais" value={profileFormValue.channels} onChange={(value) => setCompanyProfile((prev) => ({ ...prev, channels: fromLines(value) }))} />
+              </div>
+            </details>
 
             <div className="flex flex-wrap gap-2 pt-1">
               <button
@@ -1200,211 +1762,213 @@ export default function StudioCmoPage() {
                 {generatingBriefs ? "Gerando..." : "Gerar pautas + briefs"}
               </button>
             </div>
-            <div
-              id="cmo-pautas"
-              className="space-y-3 rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3"
-            >
+
+            <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
-                    Pautas por origem
+                    Agenda gerada
                   </div>
                   <p className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                    A IA puxa do calendário; o usuário injeta pautas próprias para contaminar a estratégia com contexto real.
+                    Cada item agora mostra a sua base real: portfólio, oportunidades e regiões associadas.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={appendAllAiSuggestions}
-                  disabled={!aiTopicSuggestions.length}
-                  className="rounded border border-highlight-light px-3 py-1 text-xs font-semibold text-highlight-light transition hover:bg-secondary-light/20 disabled:opacity-60"
-                >
-                  Usar sugestões IA
-                </button>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setActivePautaView("ia")}
-                    className={`rounded border px-3 py-1 text-xs transition ${
-                      activePautaView === "ia"
-                        ? "border-highlight-light text-highlight-light bg-secondary-light/20 dark:border-highlight-dark dark:text-highlight-dark dark:bg-secondary-dark/30"
-                        : "border-secondary-dark/30 text-secondary-dark hover:bg-secondary-light/20 dark:border-secondary-light/30 dark:text-secondary-light dark:hover:bg-secondary-dark/30"
-                    }`}
-                  >
-                    Pautas IA ({pautaIaItems.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActivePautaView("usuario")}
-                    className={`rounded border px-3 py-1 text-xs transition ${
-                      activePautaView === "usuario"
-                        ? "border-highlight-light text-highlight-light bg-secondary-light/20 dark:border-highlight-dark dark:text-highlight-dark dark:bg-secondary-dark/30"
-                        : "border-secondary-dark/30 text-secondary-dark hover:bg-secondary-light/20 dark:border-secondary-light/30 dark:text-secondary-light dark:hover:bg-secondary-dark/30"
-                    }`}
-                  >
-                    Pautas do usuário ({manualTopicSuggestions.length || pautaUserItems.length})
-                  </button>
+                <div className="text-[11px] text-secondary-dark/60 dark:text-secondary-light/60">
+                  {calendarItems.length} itens
                 </div>
               </div>
 
-              <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
-                      Sugestões IA
+              {calendarItems.length ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {calendarItems.map((item, index) => (
+                    <div
+                      key={item.id || `${item.calendarRunId || "calendar"}-${item.title || "untitled"}-${item.period || "no-period"}-${index}`}
+                      className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/30 dark:bg-black/10 p-3 space-y-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-secondary-dark dark:text-secondary-light">
+                            {item.title || "Item sem título"}
+                          </div>
+                          <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                            {item.channel || "blog"} • {item.scope || "escopo não definido"} •{" "}
+                            {item.scheduledAt ? new Date(item.scheduledAt).toLocaleDateString("pt-BR") : "sem data"}
+                          </div>
+                        </div>
+                        <span className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 px-2 py-0.5 text-[10px] text-secondary-dark/70 dark:text-secondary-light/70">
+                          {getCalendarItemSourceLabel(item, portfolioSnapshot, opportunitySearch)}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        {uniqueStrings([
+                          ...(item.relatedRegions || []),
+                          item.theme || "",
+                          item.angle || "",
+                        ])
+                          .slice(0, 4)
+                          .map((chip) => (
+                            <span
+                              key={`${item.id || item.title || "calendar"}-${chip}`}
+                              className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5 text-[10px] text-secondary-dark/70 dark:text-secondary-light/70"
+                            >
+                              {chip}
+                            </span>
+                          ))}
+                      </div>
+
+                      <div className="text-[11px] leading-4 text-secondary-dark/65 dark:text-secondary-light/65">
+                        {item.objective || strategy?.objective || "Sem objetivo definido."}
+                      </div>
                     </div>
-                    <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                      Tópicos derivados do perfil, da estratégia e do calendário. Clique para levar ao bloco do usuário.
-                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                  Gere o calendário para visualizar a origem de cada pauta.
+                </div>
+              )}
+            </div>
+          </div>
+          </section>
+        ) : null}
+
+        {activeSection === "pautas" ? (
+          <div
+            id="cmo-pautas"
+            className="space-y-4 rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-4"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                  Pautas por origem
+                </div>
+                <p className="text-sm text-secondary-dark/80 dark:text-secondary-light/80">
+                  A IA sugere pautas com base no contexto real. O usuário completa o que fizer sentido e ignora o resto.
+                </p>
+                <div className="text-[11px] text-secondary-dark/60 dark:text-secondary-light/60">
+                  Base usada: {aiTopicSuggestionSummary}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={appendAllAiSuggestions}
+                disabled={!aiTopicSuggestions.length}
+                className="rounded border border-highlight-light px-3 py-2 text-xs font-semibold text-highlight-light transition hover:bg-secondary-light/20 disabled:opacity-60"
+              >
+                Usar todas as sugestões IA
+              </button>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-3">
+                <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                    Sugestões IA
                   </div>
                   <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                    {aiTopicSuggestions.length} sugestões
+                    Ideias mais úteis para o blog, com base em portfólio, oportunidades e agenda.
                   </div>
                 </div>
+
                 {aiTopicSuggestions.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {aiTopicSuggestions.map((topic, index) => (
+                  <div className="space-y-2">
+                    {aiTopicSuggestions.map((suggestion) => (
                       <button
-                        key={`${topic}-${index}`}
+                        key={suggestion.id}
                         type="button"
-                        onClick={() => appendTopicToManualTopics(topic)}
-                        className="rounded-full border border-secondary-dark/20 px-3 py-1 text-xs text-secondary-dark transition hover:bg-secondary-light/20 dark:border-secondary-light/20 dark:text-secondary-light"
+                        onClick={() => appendTopicToManualTopics(suggestion.label)}
+                        className="w-full rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 px-3 py-3 text-left transition hover:bg-secondary-light/20 dark:hover:bg-secondary-dark/30"
                       >
-                        + {topic}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="text-sm font-medium text-secondary-dark dark:text-secondary-light">
+                            + {getSuggestionChipText(suggestion)}
+                          </div>
+                          <span className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 px-2 py-0.5 text-[10px] text-secondary-dark/60 dark:text-secondary-light/60">
+                            adicionar
+                          </span>
+                        </div>
+                        <div className="mt-1 text-[11px] leading-4 text-secondary-dark/70 dark:text-secondary-light/70">
+                          {suggestion.rationale}
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {suggestion.evidence.slice(0, 3).map((evidence, evidenceIndex) => (
+                            <span
+                              key={`${suggestion.id}-evidence-${evidenceIndex}`}
+                              className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/30 dark:bg-black/10 px-2 py-0.5 text-[10px] text-secondary-dark/70 dark:text-secondary-light/70"
+                            >
+                              {evidence}
+                            </span>
+                          ))}
+                        </div>
                       </button>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                    Complete o perfil, a estratégia e o calendário para gerar sugestões mais úteis.
+                  <div className="rounded border border-dashed border-secondary-dark/20 dark:border-secondary-light/20 p-3 text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                    Complete o contexto para gerar sugestões mais precisas.
                   </div>
                 )}
               </div>
 
-              {activePautaView === "ia" ? (
-                <div className="space-y-3">
-                  <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
-                      Pautas IA
-                    </div>
-                    <div className="text-sm text-secondary-dark dark:text-secondary-light">
-                      Pautas derivadas do calendário editorial e da estratégia. São as pautas que a máquina já entende como prioritárias.
-                    </div>
+              <div className="space-y-3">
+                <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                    Pautas do usuário
                   </div>
-                  <div className="space-y-2">
-                    {pautaIaItems.length ? (
-                      pautaIaItems.map((brief, index) => (
-                        <div
-                          key={brief.id || `${brief.briefRunId || "brief"}-${brief.title || "untitled"}-${brief.period || "no-period"}-${index}`}
-                          className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 p-3 space-y-2"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div className="space-y-1">
-                              <div className="font-medium text-secondary-dark dark:text-secondary-light">
-                                {brief.title || "Brief sem titulo"}
-                              </div>
-                              <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                                {brief.channel || "blog"} - {brief.status || "draft"} - {" "}
-                                {brief.scheduledAt || "sem data"}
-                              </div>
-                              <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                                {brief.editorialQuestion || brief.objective || "Sem pergunta editorial definida."}
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => openBriefEdit(brief)}
-                              className="rounded border border-secondary-dark/30 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/30"
-                            >
-                              Editar brief
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                        Nenhuma pauta IA gerada ainda.
-                      </div>
-                    )}
+                  <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                    Aqui entram as pautas que você quer forçar no plano editorial.
                   </div>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
-                      Pautas do usuário
-                    </div>
-                    <div className="text-sm text-secondary-dark dark:text-secondary-light">
-                      Insira aqui os temas que o CMO deve respeitar. Eles entram na geração junto com o calendário.
-                    </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                    Uma pauta por linha.
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                      Uma pauta por linha. Use linguagem de negócio, não palavras soltas.
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setManualTopics(
-                          [
-                            "Upgrade residencial em bairros nobres",
-                            "Comparativo entre empreendimentos premium",
-                            "Como analisar um lançamento sem cair em hype",
-                          ].join("\n"),
-                        )
-                      }
-                      className="rounded border border-secondary-dark/20 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/20"
-                    >
-                      Usar exemplos
-                    </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setManualTopics(
+                        [
+                          "Upgrade residencial em bairros nobres",
+                          "Comparativo entre empreendimentos premium",
+                          "Como analisar um lançamento sem cair em hype",
+                        ].join("\n"),
+                      )
+                    }
+                    className="rounded border border-secondary-dark/20 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/20"
+                  >
+                    Usar exemplos
+                  </button>
+                </div>
+
+                <TextAreaField label="Pautas sugeridas" value={manualTopics} onChange={setManualTopics} rows={6} />
+
+                <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                    Pré-visualização
                   </div>
-                  <TextAreaField
-                    label="Pautas sugeridas"
-                    value={manualTopics}
-                    onChange={setManualTopics}
-                    rows={5}
-                  />
-                  <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
-                      Pré-visualização
-                    </div>
-                    {manualTopicSuggestions.length ? (
-                      <ul className="space-y-1 text-sm text-secondary-dark dark:text-secondary-light">
-                        {manualTopicSuggestions.map((topic, index) => (
-                          <li key={`${topic}-${index}`} className="rounded border border-secondary-dark/10 px-2 py-1">
-                            {topic}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                        Nenhuma pauta sugerida pelo usuário ainda.
-                      </div>
-                    )}
-                  </div>
-                  {pautaUserItems.length ? (
-                    <div className="space-y-2">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
-                        Briefs manuais já gerados
-                      </div>
-                      {pautaUserItems.map((brief, index) => (
-                        <div
-                          key={brief.id || `${brief.briefRunId || "manual"}-${brief.title || "untitled"}-${index}`}
-                          className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 p-3 space-y-2"
-                        >
-                          <div className="font-medium text-secondary-dark dark:text-secondary-light">
-                            {brief.title || "Brief sem titulo"}
-                          </div>
-                          <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                            {brief.manualTopic || brief.scope || "Pauta-base sem detalhamento."}
-                          </div>
-                        </div>
+                  {manualTopicSuggestions.length ? (
+                    <ul className="space-y-1 text-sm text-secondary-dark dark:text-secondary-light">
+                      {manualTopicSuggestions.map((topic, index) => (
+                        <li key={`${topic}-${index}`} className="rounded border border-secondary-dark/10 px-2 py-1">
+                          {topic}
+                        </li>
                       ))}
+                    </ul>
+                  ) : (
+                    <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                      Nenhuma pauta sugerida pelo usuário ainda.
                     </div>
-                  ) : null}
+                  )}
                 </div>
-              )}
+              </div>
             </div>
+          </div>
+        ) : null}
+
+        {activeSection === "revisao" ? (
+          <>
             <div className="grid gap-3 md:grid-cols-3">
               <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3 space-y-2">
                 <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
@@ -1447,43 +2011,36 @@ export default function StudioCmoPage() {
               </div>
             </div>
 
-            <details className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3">
-              <summary className="cursor-pointer text-sm font-semibold text-highlight-light dark:text-highlight-dark">
-                Dados tecnicos
-              </summary>
-              <div className="mt-3 grid gap-3">
-                <ReadOnlyJson title="Portfolio Snapshot" value={portfolioSnapshot} />
-                <ReadOnlyJson title="Oportunidades" value={opportunitySearch} />
-                <ReadOnlyJson title="Estrategia" value={strategy} />
-                <ReadOnlyJson title="Snapshots recentes" value={portfolioSnapshots} />
-                <ReadOnlyJson title="Oportunidades recentes" value={marketOpportunityDrafts} />
-                <ReadOnlyJson title="Estrategias recentes" value={strategyDrafts} />
-                <ReadOnlyJson title="Calendario editorial" value={calendarItems} />
-                <ReadOnlyJson title="Briefs editoriais" value={briefItems} />
-              </div>
-            </details>
+            <div id="cmo-revisao" className="space-y-4">
+              <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                      Pautas em revisão
+                    </div>
+                    <div className="text-sm text-secondary-dark/80 dark:text-secondary-light/80">
+                      Ajuste, aprove e envie só o que realmente vale seguir adiante.
+                    </div>
+                  </div>
+                  <div className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-3 py-2 text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                    {uniqueBriefItems.length} brief(s)
+                  </div>
+                </div>
 
-            <div id="cmo-revisao" className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-semibold text-highlight-light dark:text-highlight-dark">
-                  Pautas em revisão
-                </div>
-                <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                  Editar pauta, gerar texto e enviar para a agenda
-                </div>
+                {briefsError ? (
+                  <div className="mt-3 rounded border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-700 dark:text-red-300">
+                    <div className="font-semibold">Erro ao gerar pautas</div>
+                    <pre className="mt-2 whitespace-pre-wrap break-words">{briefsError}</pre>
+                  </div>
+                ) : null}
               </div>
-              {briefsError ? (
-                <div className="rounded border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-700 dark:text-red-300">
-                  <div className="font-semibold">Erro ao gerar pautas</div>
-                  <pre className="mt-2 whitespace-pre-wrap break-words">{briefsError}</pre>
-                </div>
-              ) : null}
-              <div className="space-y-2">
-                {uniqueBriefItems.length ? (
-                  uniqueBriefItems.map((brief, index) => (
+
+              {uniqueBriefItems.length ? (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {uniqueBriefItems.map((brief, index) => (
                     <div
                       key={brief.id || `${brief.briefRunId || "brief"}-${brief.title || "untitled"}-${brief.period || "no-period"}-${index}`}
-                      className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 p-3 space-y-2"
+                      className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-4 space-y-3"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="space-y-1">
@@ -1491,57 +2048,82 @@ export default function StudioCmoPage() {
                             {brief.title || "Brief sem titulo"}
                           </div>
                           <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                            {brief.channel || "blog"} - {brief.status || "draft"} -{" "}
-                            {brief.scheduledAt || "sem data"}
+                            {brief.channel || "blog"} • {brief.status || "draft"} • {brief.scheduledAt || "sem data"}
                           </div>
                           <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
                             {brief.objective || "Sem objetivo definido."}
                           </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void approveBrief(brief)}
-                            disabled={updatingBriefId === brief.id || sendingBriefId === brief.id}
-                            className="rounded border border-secondary-dark/30 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/30 disabled:opacity-60"
-                          >
-                            {updatingBriefId === brief.id ? "Aprovando..." : "Marcar como aprovado"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void sendBriefToAgenda(brief)}
-                            disabled={sendingBriefId === brief.id}
-                            className="rounded border border-highlight-light px-3 py-1 text-xs font-semibold text-highlight-light transition hover:bg-secondary-light/20 disabled:opacity-60"
-                          >
-                            {sendingBriefId === brief.id ? "Enviando..." : "Enviar para agenda"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openBriefEdit(brief)}
-                            className="rounded border border-secondary-dark/30 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/30"
-                          >
-                            Editar brief
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openBriefDraft(brief)}
-                            className="rounded border border-secondary-dark/30 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/30"
-                          >
-                            Gerar texto rascunho
-                          </button>
+                        <span className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 px-2 py-0.5 text-[10px] text-secondary-dark/70 dark:text-secondary-light/70">
+                          {getBriefSourceLabel(brief)}
+                        </span>
+                      </div>
+
+                      {brief.sourceSignals ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {uniqueStrings([
+                            ...(brief.sourceSignals.calendarTitle ? [brief.sourceSignals.calendarTitle] : []),
+                            ...(brief.sourceSignals.calendarScope ? [brief.sourceSignals.calendarScope] : []),
+                            ...(brief.sourceSignals.calendarTheme ? [brief.sourceSignals.calendarTheme] : []),
+                            ...(brief.sourceSignals.portfolioRegions || []),
+                            ...(brief.sourceSignals.opportunityTitles || []),
+                            ...(brief.sourceSignals.strategyPillars || []),
+                          ])
+                            .slice(0, 5)
+                            .map((chip) => (
+                              <span
+                                key={`${brief.id || brief.title || "brief"}-${chip}`}
+                                className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5 text-[10px] text-secondary-dark/70 dark:text-secondary-light/70"
+                              >
+                                {chip}
+                              </span>
+                            ))}
                         </div>
+                      ) : null}
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void approveBrief(brief)}
+                          disabled={updatingBriefId === brief.id || sendingBriefId === brief.id}
+                          className="rounded border border-secondary-dark/30 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/30 disabled:opacity-60"
+                        >
+                          {updatingBriefId === brief.id ? "Aprovando..." : "Aprovar"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void sendBriefToAgenda(brief)}
+                          disabled={sendingBriefId === brief.id}
+                          className="rounded border border-highlight-light px-3 py-1 text-xs font-semibold text-highlight-light transition hover:bg-secondary-light/20 disabled:opacity-60"
+                        >
+                          {sendingBriefId === brief.id ? "Enviando..." : "Enviar"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openBriefEdit(brief)}
+                          className="rounded border border-secondary-dark/30 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/30"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openBriefDraft(brief)}
+                          className="rounded border border-secondary-dark/30 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/30"
+                        >
+                          Rascunho
+                        </button>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                    Nenhuma pauta gerada ainda.
-                  </div>
-                )}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded border border-dashed border-secondary-dark/20 dark:border-secondary-light/20 p-4 text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                  Nenhuma pauta gerada ainda.
+                </div>
+              )}
             </div>
-          </div>
-        </section>
+          </>
+        ) : null}
       </div>
     </AdminLayout>
   );

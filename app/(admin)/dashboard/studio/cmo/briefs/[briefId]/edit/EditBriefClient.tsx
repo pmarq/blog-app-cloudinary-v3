@@ -29,6 +29,19 @@ type BriefData = {
   keyMessages?: string[];
   guardrails?: string[];
   scheduledAt?: string | null;
+  sourceSignals?: {
+    portfolioRegions?: string[];
+    portfolioCities?: string[];
+    portfolioSegments?: string[];
+    opportunityTitles?: string[];
+    opportunityScopes?: string[];
+    opportunityRegions?: string[];
+    calendarTitle?: string;
+    calendarScope?: string;
+    calendarTheme?: string;
+    calendarAngle?: string;
+    strategyPillars?: string[];
+  };
   requiredSources?: {
     kb?: boolean;
     web?: boolean;
@@ -74,6 +87,37 @@ function toInputDate(value: string | null | undefined): string {
   if (Number.isNaN(parsed.getTime())) return "";
   const pad = (input: number) => String(input).padStart(2, "0");
   return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+}
+
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(normalized);
+  }
+
+  return output;
+}
+
+function getSourceLabel(brief: BriefData | null): string {
+  const signals = brief?.sourceSignals;
+  if (!signals) {
+    return brief?.sourceType === "manual" ? "Origem: usuário" : "Origem: calendário";
+  }
+
+  const parts: string[] = [];
+  if (signals.calendarTitle) parts.push("calendário");
+  if (signals.portfolioRegions?.length || signals.portfolioCities?.length || signals.portfolioSegments?.length) parts.push("portfólio");
+  if (signals.opportunityTitles?.length || signals.opportunityScopes?.length || signals.opportunityRegions?.length) parts.push("oportunidade");
+  if (signals.strategyPillars?.length) parts.push("estratégia");
+
+  return `Origem: ${uniqueStrings(parts).join(" + ") || "calendário"}`;
 }
 
 type Props = {
@@ -290,6 +334,25 @@ export default function EditBriefClient({ briefId }: Props) {
               <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
                 {summary || "Edite os campos abaixo"}
               </div>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {uniqueStrings([
+                  ...(brief?.sourceSignals?.calendarTitle ? [brief.sourceSignals.calendarTitle] : []),
+                  ...(brief?.sourceSignals?.calendarScope ? [brief.sourceSignals.calendarScope] : []),
+                  ...(brief?.sourceSignals?.calendarTheme ? [brief.sourceSignals.calendarTheme] : []),
+                  ...(brief?.sourceSignals?.portfolioRegions || []),
+                  ...(brief?.sourceSignals?.opportunityTitles || []),
+                  ...(brief?.sourceSignals?.strategyPillars || []),
+                ])
+                  .slice(0, 5)
+                  .map((chip) => (
+                    <span
+                      key={`${normalizedBriefId}-${chip}`}
+                      className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5 text-[10px] text-secondary-dark/70 dark:text-secondary-light/70"
+                    >
+                      {chip}
+                    </span>
+                  ))}
+              </div>
             </div>
             <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/50 dark:bg-black/10 px-3 py-2 text-xs text-secondary-dark dark:text-secondary-light">
               <div className="font-semibold">{form.channel || "blog"}</div>
@@ -328,6 +391,68 @@ export default function EditBriefClient({ briefId }: Props) {
             <TextAreaField label="Público-alvo" value={form.audience} onChange={(value) => setForm((prev) => ({ ...prev, audience: value }))} />
             <TextAreaField label="Mensagens-chave" value={form.keyMessages} onChange={(value) => setForm((prev) => ({ ...prev, keyMessages: value }))} />
             <TextAreaField label="Guardrails" value={form.guardrails} onChange={(value) => setForm((prev) => ({ ...prev, guardrails: value }))} />
+          </div>
+
+          <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                Origem do brief
+              </div>
+              <div className="text-[11px] text-secondary-dark/60 dark:text-secondary-light/60">
+                {getSourceLabel(brief)}
+              </div>
+            </div>
+            {brief?.sourceSignals ? (
+              <div className="grid gap-2 md:grid-cols-2">
+                <div className="rounded border border-secondary-dark/10 dark:border-secondary-light/10 p-2 text-xs text-secondary-dark dark:text-secondary-light">
+                  <div className="font-semibold">Calend?rio</div>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {uniqueStrings([
+                      brief.sourceSignals.calendarTitle || "",
+                      brief.sourceSignals.calendarScope || "",
+                      brief.sourceSignals.calendarTheme || "",
+                      brief.sourceSignals.calendarAngle || "",
+                    ])
+                      .slice(0, 4)
+                      .map((chip) => (
+                        <span
+                          key={`${normalizedBriefId}-calendar-${chip}`}
+                          className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5 text-[10px]"
+                        >
+                          {chip}
+                        </span>
+                      ))}
+                  </div>
+                </div>
+                <div className="rounded border border-secondary-dark/10 dark:border-secondary-light/10 p-2 text-xs text-secondary-dark dark:text-secondary-light">
+                  <div className="font-semibold">Portf?lio e mercado</div>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {uniqueStrings([
+                      ...(brief.sourceSignals.portfolioRegions || []),
+                      ...(brief.sourceSignals.portfolioCities || []),
+                      ...(brief.sourceSignals.portfolioSegments || []),
+                      ...(brief.sourceSignals.opportunityTitles || []),
+                      ...(brief.sourceSignals.opportunityScopes || []),
+                      ...(brief.sourceSignals.opportunityRegions || []),
+                      ...(brief.sourceSignals.strategyPillars || []),
+                    ])
+                      .slice(0, 6)
+                      .map((chip) => (
+                        <span
+                          key={`${normalizedBriefId}-signals-${chip}`}
+                          className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5 text-[10px]"
+                        >
+                          {chip}
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                Este brief n?o trouxe sinais persistidos de origem.
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2">

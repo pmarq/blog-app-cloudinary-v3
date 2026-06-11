@@ -44,6 +44,153 @@ export interface FinalPost extends SeoResult {
   origin?: string;
 }
 
+type BriefSourceSignals = {
+  portfolioRegions?: string[];
+  portfolioCities?: string[];
+  portfolioSegments?: string[];
+  opportunityTitles?: string[];
+  opportunityScopes?: string[];
+  opportunityRegions?: string[];
+  calendarTitle?: string;
+  calendarScope?: string;
+  calendarTheme?: string;
+  calendarAngle?: string;
+  strategyPillars?: string[];
+};
+
+type BriefContext = {
+  id?: string;
+  title?: string;
+  channel?: string;
+  theme?: string | null;
+  scope?: string | null;
+  objective?: string;
+  angle?: string;
+  cta?: string;
+  sourceType?: string | null;
+  editorialQuestion?: string | null;
+  whyNow?: string | null;
+  contentFormat?: string | null;
+  manualTopic?: string | null;
+  sourceSignals?: BriefSourceSignals | null;
+};
+
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(normalized);
+  }
+
+  return output;
+}
+
+function slugifyText(value: string): string {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+}
+
+function trimToLength(value: string, maxLength: number): string {
+  const text = String(value || "").trim().replace(/\s+/g, " ");
+  if (!text || text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(maxLength - 1, 0)).trimEnd()}…`;
+}
+
+function normalizeTagValue(value: string): string {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[|/•]+/g, " ")
+    .replace(/\s*-\s*/g, " ")
+    .trim();
+}
+
+function buildSeoFromBriefContext(briefTitle: string, briefContext: BriefContext | null): SeoResult {
+  const signals = briefContext?.sourceSignals;
+  const regions = uniqueStrings([
+    ...(signals?.portfolioRegions || []),
+    ...(signals?.portfolioCities || []),
+    ...(signals?.opportunityRegions || []),
+  ]);
+  const subjects = uniqueStrings([
+    ...(signals?.portfolioSegments || []),
+    ...(signals?.opportunityTitles || []),
+    ...(signals?.opportunityScopes || []),
+    ...(signals?.strategyPillars || []),
+    ...(signals?.calendarTheme ? [signals.calendarTheme] : []),
+    ...(signals?.calendarTitle ? [signals.calendarTitle] : []),
+  ]);
+  const titleSeed = String(briefContext?.title || briefTitle || "").trim() || "Conteúdo editorial";
+  const subject = subjects[0] || briefContext?.objective || titleSeed;
+  const region = regions[0] || "";
+  const channel = String(briefContext?.channel || "").trim().toLowerCase();
+  const editorialHook = trimToLength(
+    briefContext?.editorialQuestion ||
+      briefContext?.whyNow ||
+      briefContext?.objective ||
+      subject,
+    62,
+  );
+  const topicLine = trimToLength(
+    subject && region ? `${subject} em ${region}` : subject,
+    76,
+  );
+
+  const metaCore =
+    channel === "newsletter"
+      ? `Newsletter sobre ${topicLine || titleSeed}`
+      : channel === "instagram"
+        ? `Leitura visual sobre ${topicLine || titleSeed}`
+        : `Análise de ${topicLine || titleSeed}`;
+
+  const meta = trimToLength(
+    editorialHook && editorialHook !== topicLine
+      ? `${metaCore}. Veja como ${editorialHook}`
+      : metaCore,
+    150,
+  );
+
+  const slugSource = uniqueStrings([
+    subject,
+    region,
+    briefContext?.title || titleSeed,
+  ])
+    .join(" ")
+    .trim();
+
+  const tags = uniqueStrings([
+    "mercado imobiliário",
+    "alto padrão",
+    channel,
+    normalizeTagValue(subject),
+    normalizeTagValue(region),
+    ...(signals?.portfolioSegments || []).map(normalizeTagValue),
+    ...(signals?.portfolioRegions || []).map(normalizeTagValue),
+    ...(signals?.portfolioCities || []).map(normalizeTagValue),
+    ...(signals?.opportunityTitles || []).map(normalizeTagValue),
+    ...(signals?.strategyPillars || []).map(normalizeTagValue),
+  ])
+    .filter((tag) => tag.length > 2)
+    .slice(0, 8);
+
+  return {
+    meta,
+    slug: slugifyText(slugSource || titleSeed),
+    tags: tags.join(", "),
+  };
+}
+
 interface Props {
   initialValue?: FinalPost;
   btnTitle?: string;
@@ -64,6 +211,7 @@ export default function Editor({
   const [uploading, setUploading] = useState(false);
   const [images, setImages] = useState<Array<{ src: string }>>([]);
   const [seoInitialValue, setSeoInitialValue] = useState<SeoResult>();
+  const [briefContext, setBriefContext] = useState<BriefContext | null>(null);
   const [showStudioStub, setShowStudioStub] = useState(false);
   const [mockActions, setMockActions] = useState<string[]>([]);
   const [mockBusy, setMockBusy] = useState(false);
@@ -181,6 +329,54 @@ export default function Editor({
       setPost((prev) => ({ ...prev, briefId, origin: prev.origin || "studio" }));
     }
   }, [briefId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadBriefContext = async () => {
+      if (!briefId) return;
+      try {
+        const token = await currentUser?.getIdToken(true);
+        if (!token) return;
+        const response = await fetch(
+          withBasePath(`/api/studio/cmo/briefs/${encodeURIComponent(briefId)}?orgId=`),
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload?.ok || cancelled) return;
+        setBriefContext(payload.brief || null);
+      } catch {
+        if (!cancelled) setBriefContext(null);
+      }
+    };
+
+    void loadBriefContext();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [briefId, currentUser]);
+
+  useEffect(() => {
+    if (!briefContext) return;
+
+    const derivedSeo = buildSeoFromBriefContext(post.title || briefContext.title || "", briefContext);
+    setSeoInitialValue((prev) => {
+      if (prev?.meta || prev?.slug || prev?.tags) return prev;
+      return derivedSeo;
+    });
+
+    setPost((prev) => ({
+      ...prev,
+      meta: prev.meta || derivedSeo.meta,
+      slug: prev.slug || derivedSeo.slug,
+      tags: prev.tags || derivedSeo.tags,
+    }));
+  }, [briefContext]);
 
   // 1) Memoizando TODAS as opções do useEditor:
   const editorConfig = useMemo(() => {
@@ -506,6 +702,39 @@ export default function Editor({
               </button>
             </div>
           </div>
+          {briefContext ? (
+            <div className="mb-3 rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2 text-xs text-secondary-dark dark:text-secondary-light">
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-semibold uppercase tracking-wide text-highlight-light">
+                  Contexto do brief
+                </div>
+                <div>{briefContext.sourceType || "studio"}</div>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {uniqueStrings([
+                  ...(briefContext.sourceSignals?.calendarTitle ? [briefContext.sourceSignals.calendarTitle] : []),
+                  ...(briefContext.sourceSignals?.calendarScope ? [briefContext.sourceSignals.calendarScope] : []),
+                  ...(briefContext.sourceSignals?.calendarTheme ? [briefContext.sourceSignals.calendarTheme] : []),
+                  ...(briefContext.sourceSignals?.portfolioRegions || []),
+                  ...(briefContext.sourceSignals?.portfolioCities || []),
+                  ...(briefContext.sourceSignals?.portfolioSegments || []),
+                  ...(briefContext.sourceSignals?.opportunityTitles || []),
+                  ...(briefContext.sourceSignals?.opportunityScopes || []),
+                  ...(briefContext.sourceSignals?.opportunityRegions || []),
+                  ...(briefContext.sourceSignals?.strategyPillars || []),
+                ])
+                  .slice(0, 8)
+                  .map((chip) => (
+                    <span
+                      key={`${briefId || "editor"}-${chip}`}
+                      className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5 text-[10px]"
+                    >
+                      {chip}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          ) : null}
           {/*Categorias*/}
           <select
             value={post.categoryId || ""}
