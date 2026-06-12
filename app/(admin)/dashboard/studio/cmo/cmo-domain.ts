@@ -27,6 +27,35 @@ export type PortfolioSnapshot = {
   excludedSegments?: string[];
   strategicSummary?: string;
   relatedProductIds?: string[];
+  territorialIndex?: {
+    coverage?: {
+      projectCount?: number;
+      neighborhoodCount?: number;
+      cityCount?: number;
+    };
+    primaryCity?: string | null;
+    primaryNeighborhood?: string | null;
+    focusCities?: string[];
+    focusNeighborhoods?: string[];
+    explorationNeighborhoods?: string[];
+    neighborhoods?: Array<{
+      name: string;
+      count: number;
+      projectIds?: string[];
+      cities?: string[];
+      segments?: string[];
+      lastUpdatedAt?: number | null;
+    }>;
+    cities?: Array<{
+      name: string;
+      count: number;
+      projectIds?: string[];
+      neighborhoods?: string[];
+      segments?: string[];
+      lastUpdatedAt?: number | null;
+    }>;
+    territorialSummary?: string;
+  };
 };
 
 export type MarketOpportunityPayload = {
@@ -43,6 +72,19 @@ export type MarketOpportunityPayload = {
     references?: Array<{ title: string; url: string | null }>;
     warning?: string | null;
   }>;
+};
+
+export type OpportunitySearchContext = {
+  companyProfile: CompanyProfile;
+  portfolioSnapshot: PortfolioSnapshot | null;
+  previousOpportunitySearch: MarketOpportunityPayload | null;
+  previousOpportunitySearchId?: string;
+};
+
+export type OpportunitySearchRequest = {
+  orgId: string;
+  portfolioSnapshotId?: string;
+  context: OpportunitySearchContext;
 };
 
 export type StrategyPayload = {
@@ -105,6 +147,7 @@ export type BriefItem = {
   manualTopic?: string | null;
   priority?: number | null;
   guardrails?: string[];
+  territorialFocus?: string[];
   sourceSignals?: {
     portfolioRegions?: string[];
     portfolioCities?: string[];

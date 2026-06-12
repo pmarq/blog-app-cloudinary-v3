@@ -16,6 +16,21 @@ type CompanyProfileValue = {
 
 type DiagnosticSectionProps = {
   orgId: string;
+  portfolioSnapshot: {
+    territorialIndex?: {
+      coverage?: {
+        projectCount?: number;
+        neighborhoodCount?: number;
+        cityCount?: number;
+      };
+      territorialSummary?: string;
+      focusNeighborhoods?: string[];
+      focusCities?: string[];
+    };
+    mainNeighborhoods?: string[];
+    mainCities?: string[];
+    strategicSummary?: string;
+  } | null;
   loadingProfile: boolean;
   loadingDrafts: boolean;
   savingProfile: boolean;
@@ -26,6 +41,22 @@ type DiagnosticSectionProps = {
   generatingStrategy: boolean;
   generatingCalendar: boolean;
   generatingBriefs: boolean;
+  cmoRunTrace: {
+    opportunitySearchId: string | null;
+    strategyId: string | null;
+    calendarRunId: string | null;
+    briefRunId: string | null;
+    selectedOpportunityTitles: string[];
+  };
+  opportunitySearchContext: {
+    runId: string | null;
+    requestedAt: string | null;
+    companyProfileName: string;
+    portfolioSnapshotId: string | null;
+    previousOpportunitySearchId: string | null;
+    previousOpportunitySearchTitle: string | null;
+    queriesCount: number;
+  };
   opportunitySummary: {
     count: number;
     selectedCount: number;
@@ -90,6 +121,7 @@ type DiagnosticSectionProps = {
 
 export function CmoDiagnosticSection({
   orgId,
+  portfolioSnapshot,
   loadingProfile,
   loadingDrafts,
   savingProfile,
@@ -100,6 +132,8 @@ export function CmoDiagnosticSection({
   generatingStrategy,
   generatingCalendar,
   generatingBriefs,
+  cmoRunTrace,
+  opportunitySearchContext,
   opportunitySummary,
   selectedOpportunityKeys,
   onToggleOpportunitySelection,
@@ -142,6 +176,31 @@ export function CmoDiagnosticSection({
     }),
     [calendarItems, strategyObjective],
   );
+  const territorialSnapshot = useMemo(() => {
+    const territorialIndex = portfolioSnapshot?.territorialIndex || null;
+    const topNeighborhoods = uniqueStrings([
+      ...(territorialIndex?.focusNeighborhoods || []),
+      ...(portfolioSnapshot?.mainNeighborhoods || []),
+    ]);
+    const topCities = uniqueStrings([
+      ...(territorialIndex?.focusCities || []),
+      ...(portfolioSnapshot?.mainCities || []),
+    ]);
+    const coverage =
+      territorialIndex?.coverage?.neighborhoodCount || territorialIndex?.coverage?.cityCount
+        ? `${territorialIndex?.coverage?.neighborhoodCount || 0} bairros • ${territorialIndex?.coverage?.cityCount || 0} cidades`
+        : `${topNeighborhoods.length} bairros • ${topCities.length} cidades`;
+
+    return {
+      summary:
+        territorialIndex?.territorialSummary ||
+        portfolioSnapshot?.strategicSummary ||
+        "Sem índice territorial disponível.",
+      topNeighborhoods: topNeighborhoods.slice(0, 6),
+      topCities: topCities.slice(0, 4),
+      coverage,
+    };
+  }, [portfolioSnapshot]);
 
   return (
     <section id="cmo-diagnostico" className="space-y-4">
@@ -352,6 +411,58 @@ export function CmoDiagnosticSection({
                 : "Busca concluída. Ainda não há oportunidades visíveis para este contexto."}
           </div>
 
+          <div className="grid gap-2 rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/20 dark:bg-black/10 p-3 text-xs text-secondary-dark/75 dark:text-secondary-light/75 md:grid-cols-2">
+            <div>
+              <div className="font-semibold text-secondary-dark dark:text-secondary-light">Run atual</div>
+              <div>id: {opportunitySearchContext.runId || "sem run"}</div>
+              <div>executado em: {formatDateTime(opportunitySearchContext.requestedAt)}</div>
+              <div>consultas: {opportunitySearchContext.queriesCount}</div>
+            </div>
+            <div>
+              <div className="font-semibold text-secondary-dark dark:text-secondary-light">Contexto usado</div>
+              <div>empresa: {opportunitySearchContext.companyProfileName}</div>
+              <div>snapshot: {opportunitySearchContext.portfolioSnapshotId || "sem snapshot"}</div>
+              <div>
+                anterior: {opportunitySearchContext.previousOpportunitySearchTitle || "sem busca anterior"}
+                {opportunitySearchContext.previousOpportunitySearchId
+                  ? ` • ${opportunitySearchContext.previousOpportunitySearchId}`
+                  : ""}
+              </div>
+            </div>
+            <div>
+              <div className="font-semibold text-secondary-dark dark:text-secondary-light">Índice territorial</div>
+              <div>{territorialSnapshot.coverage}</div>
+              <div className="mt-1">
+                {territorialSnapshot.topNeighborhoods.length
+                  ? territorialSnapshot.topNeighborhoods.slice(0, 4).join(" • ")
+                  : "Sem bairros priorizados"}
+              </div>
+            </div>
+            <div>
+              <div className="font-semibold text-secondary-dark dark:text-secondary-light">Leitura do território</div>
+              <div className="mt-1 text-[11px] text-secondary-dark/60 dark:text-secondary-light/60">
+                {territorialSnapshot.summary}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-2 rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/20 dark:bg-black/10 p-3 text-xs text-secondary-dark/75 dark:text-secondary-light/75 md:grid-cols-4">
+            <TraceCard label="Oportunidade" value={cmoRunTrace.opportunitySearchId || "sem id"} />
+            <TraceCard label="Estratégia" value={cmoRunTrace.strategyId || "sem id"} />
+            <TraceCard label="Calendário" value={cmoRunTrace.calendarRunId || "sem id"} />
+            <TraceCard label="Briefs" value={cmoRunTrace.briefRunId || "sem id"} />
+            <div className="md:col-span-4">
+              <div className="font-semibold text-secondary-dark dark:text-secondary-light">
+                Oportunidades selecionadas
+              </div>
+              <div className="mt-1">
+                {cmoRunTrace.selectedOpportunityTitles.length
+                  ? cmoRunTrace.selectedOpportunityTitles.slice(0, 4).join(" • ")
+                  : "Nenhuma seleção ativa"}
+              </div>
+            </div>
+          </div>
+
           {opportunitySummary.count ? (
             <details className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/20 dark:bg-black/10 p-3">
               <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-highlight-light">
@@ -402,7 +513,36 @@ export function CmoDiagnosticSection({
                           </span>
                         </div>
                       </summary>
+                      {(() => {
+                        const opportunityRegions = uniqueStrings(item.relatedRegions || []);
+                        const matchedRegions = opportunityRegions.filter(
+                          (region) =>
+                            territorialSnapshot.topNeighborhoods.includes(region) ||
+                            territorialSnapshot.topCities.includes(region),
+                        );
+                        const unmatchedRegions = opportunityRegions.filter(
+                          (region) =>
+                            !territorialSnapshot.topNeighborhoods.includes(region) &&
+                            !territorialSnapshot.topCities.includes(region),
+                        );
+
+                        return (
                       <div className="mt-3 space-y-3">
+                        <div className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 p-2">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary-dark/70 dark:text-secondary-light/70">
+                            Origem territorial
+                          </div>
+                          <div className="mt-1 text-[11px] text-secondary-dark/75 dark:text-secondary-light/70">
+                            {matchedRegions.length
+                              ? `A oportunidade conversa com o portfólio em ${matchedRegions.slice(0, 3).join(" • ")}.`
+                              : "Ainda não cruza diretamente com os bairros priorizados do portfólio."}
+                          </div>
+                          {unmatchedRegions.length ? (
+                            <div className="mt-2 text-[10px] text-secondary-dark/60 dark:text-secondary-light/60">
+                              Regiões citadas: {unmatchedRegions.slice(0, 3).join(" • ")}
+                            </div>
+                          ) : null}
+                        </div>
                         <div className="flex flex-wrap gap-1.5">
                           {item.relatedRegions?.slice(0, 3).map((region) => (
                             <span
@@ -430,6 +570,8 @@ export function CmoDiagnosticSection({
                           {item.selected ? "Remover da seleção" : "Adicionar à seleção"}
                         </button>
                       </div>
+                        );
+                      })()}
                     </details>
                   </div>
                 ))}
@@ -776,6 +918,25 @@ function uniqueStrings(values: Array<string | null | undefined>): string[] {
   }
 
   return output;
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) return "não registrado";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function TraceCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/30 dark:bg-black/10 px-3 py-2">
+      <div className="font-semibold text-secondary-dark dark:text-secondary-light">{label}</div>
+      <div className="mt-1 break-all">{value}</div>
+    </div>
+  );
 }
 
 

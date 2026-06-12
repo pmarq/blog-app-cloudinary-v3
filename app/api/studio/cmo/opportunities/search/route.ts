@@ -21,7 +21,10 @@ export async function POST(request: NextRequest) {
     payload && typeof payload === "object"
       ? {
           ...(payload as Record<string, unknown>),
-          latestOpportunitySearch: (payload as Record<string, unknown>).opportunitySearch || null,
+          latestOpportunitySearch:
+            (payload as Record<string, unknown>).opportunitySearch ||
+            (payload as Record<string, unknown>).latestOpportunitySearch ||
+            null,
         }
       : payload;
   return NextResponse.json(nextPayload, { status: response.status });

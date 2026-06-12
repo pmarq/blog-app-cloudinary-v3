@@ -1,4 +1,6 @@
-﻿type BriefItem = {
+import { useMemo } from "react";
+
+type BriefItem = {
   id?: string;
   briefRunId?: string | null;
   title?: string;
@@ -22,6 +24,28 @@ type CmoReviewSectionProps = {
   briefGenerationReady: boolean;
   briefGenerationIssues: string[];
   strategyId?: string | null;
+  portfolioSnapshot: {
+    territorialIndex?: {
+      coverage?: {
+        projectCount?: number;
+        neighborhoodCount?: number;
+        cityCount?: number;
+      };
+      territorialSummary?: string;
+      focusNeighborhoods?: string[];
+      focusCities?: string[];
+    };
+    mainNeighborhoods?: string[];
+    mainCities?: string[];
+    strategicSummary?: string;
+  } | null;
+  cmoRunTrace: {
+    opportunitySearchId: string | null;
+    strategyId: string | null;
+    calendarRunId: string | null;
+    briefRunId: string | null;
+    selectedOpportunityTitles: string[];
+  };
   uniqueBriefItems: BriefItem[];
   pautaIaItemsCount: number;
   pautaUserItemsCount: number;
@@ -37,6 +61,8 @@ export function CmoReviewSection({
   briefGenerationReady,
   briefGenerationIssues,
   strategyId,
+  portfolioSnapshot,
+  cmoRunTrace,
   uniqueBriefItems,
   pautaIaItemsCount,
   pautaUserItemsCount,
@@ -49,6 +75,31 @@ export function CmoReviewSection({
 }: CmoReviewSectionProps) {
   const hasBriefs = uniqueBriefItems.length > 0;
   const briefPreview = uniqueBriefItems.slice(0, 6);
+  const territorialSnapshot = useMemo(() => {
+    const territorialIndex = portfolioSnapshot?.territorialIndex || null;
+    const topNeighborhoods = uniqueStrings([
+      ...(territorialIndex?.focusNeighborhoods || []),
+      ...(portfolioSnapshot?.mainNeighborhoods || []),
+    ]);
+    const topCities = uniqueStrings([
+      ...(territorialIndex?.focusCities || []),
+      ...(portfolioSnapshot?.mainCities || []),
+    ]);
+    const coverage =
+      territorialIndex?.coverage?.neighborhoodCount || territorialIndex?.coverage?.cityCount
+        ? `${territorialIndex?.coverage?.neighborhoodCount || 0} bairros • ${territorialIndex?.coverage?.cityCount || 0} cidades`
+        : `${topNeighborhoods.length} bairros • ${topCities.length} cidades`;
+
+    return {
+      summary:
+        territorialIndex?.territorialSummary ||
+        portfolioSnapshot?.strategicSummary ||
+        "Sem índice territorial disponível.",
+      topNeighborhoods: topNeighborhoods.slice(0, 6),
+      topCities: topCities.slice(0, 4),
+      coverage,
+    };
+  }, [portfolioSnapshot]);
 
   return (
     <>
@@ -86,10 +137,40 @@ export function CmoReviewSection({
         </div>
         <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3 space-y-2">
           <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+            Território
+          </div>
+          <div className="text-sm text-secondary-dark dark:text-secondary-light">
+            {territorialSnapshot.coverage}
+          </div>
+          <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+            {territorialSnapshot.topNeighborhoods.length
+              ? territorialSnapshot.topNeighborhoods.slice(0, 4).join(" • ")
+              : "Sem bairros priorizados"}
+          </div>
+        </div>
+        <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/30 dark:bg-black/10 p-3 space-y-2">
+          <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
             Revisão
           </div>
           <div className="text-sm text-secondary-dark dark:text-secondary-light">
             Depois disso, o usuário revisa o rascunho e abre o editor final.
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-2 rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/20 dark:bg-black/10 p-3 text-xs text-secondary-dark/75 dark:text-secondary-light/75 md:grid-cols-4">
+        <TraceCard label="Oportunidade" value={cmoRunTrace.opportunitySearchId || "sem id"} />
+        <TraceCard label="Estratégia" value={cmoRunTrace.strategyId || "sem id"} />
+        <TraceCard label="Calendário" value={cmoRunTrace.calendarRunId || "sem id"} />
+        <TraceCard label="Briefs" value={cmoRunTrace.briefRunId || "sem id"} />
+        <div className="md:col-span-4">
+          <div className="font-semibold text-secondary-dark dark:text-secondary-light">
+            Seleção que alimentou a revisão
+          </div>
+          <div className="mt-1">
+            {cmoRunTrace.selectedOpportunityTitles.length
+              ? cmoRunTrace.selectedOpportunityTitles.slice(0, 4).join(" • ")
+              : "Nenhuma oportunidade selecionada ainda"}
           </div>
         </div>
       </div>
@@ -178,6 +259,15 @@ function MetricPill({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-3 py-2 text-xs text-secondary-dark/70 dark:text-secondary-light/70">
       <span className="font-semibold text-secondary-dark dark:text-secondary-light">{value}</span> {label}
+    </div>
+  );
+}
+
+function TraceCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/30 dark:bg-black/10 px-3 py-2">
+      <div className="font-semibold text-secondary-dark dark:text-secondary-light">{label}</div>
+      <div className="mt-1 break-all">{value}</div>
     </div>
   );
 }
@@ -279,4 +369,6 @@ function BriefCard({
     </div>
   );
 }
+
+
 

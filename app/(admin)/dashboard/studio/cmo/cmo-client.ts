@@ -6,6 +6,7 @@ import type {
   CompanyProfile,
   MarketOpportunityPayload,
   PortfolioSnapshot,
+  OpportunitySearchContext,
   StrategyPayload,
 } from "./cmo-domain";
 
@@ -127,13 +128,24 @@ export function createCmoClient(orgId: string) {
       return payload.latestPortfolioSnapshot || null;
     },
 
-    async searchOpportunities(portfolioSnapshotId?: string) {
+    async searchOpportunities(input: {
+      portfolioSnapshotId?: string;
+      companyProfile: CompanyProfile;
+      portfolioSnapshot: PortfolioSnapshot | null;
+      previousOpportunitySearch: MarketOpportunityPayload | null;
+    }) {
       const response = await apiFetch("/api/studio/cmo/opportunities/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orgId,
-          portfolioSnapshotId: portfolioSnapshotId || undefined,
+          portfolioSnapshotId: input.portfolioSnapshotId || undefined,
+          context: {
+            companyProfile: input.companyProfile,
+            portfolioSnapshot: input.portfolioSnapshot,
+            previousOpportunitySearch: input.previousOpportunitySearch,
+            previousOpportunitySearchId: input.previousOpportunitySearch?.id || undefined,
+          } satisfies OpportunitySearchContext,
         }),
       });
       const payload = await parseJson<{ ok: boolean; message?: string; latestOpportunitySearch?: MarketOpportunityPayload }>(response);

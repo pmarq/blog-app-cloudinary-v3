@@ -82,6 +82,36 @@ function isPlaceholderTopic(value: string): boolean {
   return bannedPhrases.some((phrase) => text.includes(phrase));
 }
 
+function buildTerritorialSnapshot(portfolioSnapshot: PortfolioSnapshot | null): {
+  summary: string;
+  topNeighborhoods: string[];
+  topCities: string[];
+  coverage: string;
+} {
+  const territorialIndex = portfolioSnapshot?.territorialIndex || null;
+  const focusNeighborhoods = uniqueStrings([
+    ...(territorialIndex?.focusNeighborhoods || []),
+    ...(portfolioSnapshot?.mainNeighborhoods || []),
+    ...(territorialIndex?.neighborhoods || []).map((entry) => entry?.name || ""),
+  ]);
+  const focusCities = uniqueStrings([
+    ...(territorialIndex?.focusCities || []),
+    ...(portfolioSnapshot?.mainCities || []),
+    ...(territorialIndex?.cities || []).map((entry) => entry?.name || ""),
+  ]);
+  const coverage =
+    territorialIndex?.coverage?.neighborhoodCount || territorialIndex?.coverage?.cityCount
+      ? `${territorialIndex?.coverage?.neighborhoodCount || 0} bairros • ${territorialIndex?.coverage?.cityCount || 0} cidades`
+      : `${focusNeighborhoods.length} bairros • ${focusCities.length} cidades`;
+
+  return {
+    summary: territorialIndex?.territorialSummary || portfolioSnapshot?.strategicSummary || "Sem índice territorial disponível.",
+    topNeighborhoods: focusNeighborhoods.slice(0, 6),
+    topCities: focusCities.slice(0, 4),
+    coverage,
+  };
+}
+
 function isConcreteEditorialPhrase(value: string, anchors: string[]): boolean {
   const text = normalizeLookupText(value);
   if (!text || isPlaceholderTopic(value)) return false;
@@ -683,6 +713,13 @@ export function CmoWorkspace({
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(emptyProfile);
   const [portfolioSnapshot, setPortfolioSnapshot] = useState<PortfolioSnapshot | null>(null);
   const [opportunitySearch, setOpportunitySearch] = useState<MarketOpportunityPayload | null>(null);
+  const [lastOpportunitySearchRequest, setLastOpportunitySearchRequest] = useState<{
+    requestedAt: string;
+    portfolioSnapshotId?: string;
+    previousOpportunitySearchId?: string;
+    previousOpportunitySearchTitle?: string;
+    companyProfileName: string;
+  } | null>(null);
   const [selectedOpportunityKeys, setSelectedOpportunityKeys] = useState<string[]>([]);
   const [strategy, setStrategy] = useState<StrategyPayload | null>(null);
 
@@ -750,11 +787,17 @@ export function CmoWorkspace({
     () => groupSuggestionsByCategory(aiTopicSuggestions),
     [aiTopicSuggestions],
   );
+  const territorialSnapshot = useMemo(
+    () => buildTerritorialSnapshot(portfolioSnapshot),
+    [portfolioSnapshot],
+  );
   const aiTopicSuggestionSummary = useMemo(() => {
     const regionCount = uniqueStrings([
       ...(companyProfile.regions || []),
       ...(portfolioSnapshot?.mainNeighborhoods || []),
       ...(portfolioSnapshot?.mainCities || []),
+      ...territorialSnapshot.topNeighborhoods,
+      ...territorialSnapshot.topCities,
     ]).length;
     const opportunityCount = Array.isArray(opportunitySearch?.opportunities)
       ? opportunitySearch.opportunities.length
@@ -767,7 +810,7 @@ export function CmoWorkspace({
     ]).length;
 
     return `${regionCount} regiões, ${segmentCount} segmentos, ${opportunityCount} oportunidades, ${signalCount} sinais e ${calendarCount} itens de calendário`;
-  }, [calendarItems.length, companyProfile.marketSegment, companyProfile.regions, opportunitySearch, portfolioSnapshot, strategy?.marketSignals]);
+  }, [calendarItems.length, companyProfile.marketSegment, companyProfile.regions, opportunitySearch, portfolioSnapshot, strategy?.marketSignals, territorialSnapshot]);
   const briefGenerationIssues = useMemo(() => {
     const issues: string[] = [];
 
@@ -834,6 +877,16 @@ export function CmoWorkspace({
         ]),
       ).join(" | "),
     [selectedOpportunityItems],
+  );
+  const cmoRunTrace = useMemo(
+    () => ({
+      opportunitySearchId: opportunitySearch?.id || marketOpportunityDrafts[0]?.id || null,
+      strategyId: strategy?.id || strategyDrafts[0]?.id || null,
+      calendarRunId: calendarItems[0]?.calendarRunId || null,
+      briefRunId: briefItems[0]?.briefRunId || null,
+      selectedOpportunityTitles: selectedOpportunityItems.map((item) => item.title || "").filter(Boolean),
+    }),
+    [briefItems, calendarItems, marketOpportunityDrafts, opportunitySearch, selectedOpportunityItems, strategy, strategyDrafts],
   );
 
   useEffect(() => {
@@ -1036,8 +1089,22 @@ export function CmoWorkspace({
 
   const searchOpportunities = async () => {
     setSearchingOpportunities(true);
+    const previousOpportunitySearch = opportunitySearch || marketOpportunityDrafts[0] || null;
+    setLastOpportunitySearchRequest({
+      requestedAt: new Date().toISOString(),
+      portfolioSnapshotId: portfolioSnapshot?.id || undefined,
+      previousOpportunitySearchId: previousOpportunitySearch?.id || undefined,
+      previousOpportunitySearchTitle:
+        previousOpportunitySearch?.opportunities?.[0]?.title || undefined,
+      companyProfileName: companyProfile.name || "Sem nome",
+    });
     try {
-      const nextOpportunitySearch = await cmoClient.searchOpportunities(portfolioSnapshot?.id || undefined);
+      const nextOpportunitySearch = await cmoClient.searchOpportunities({
+        portfolioSnapshotId: portfolioSnapshot?.id || undefined,
+        companyProfile,
+        portfolioSnapshot,
+        previousOpportunitySearch,
+      });
       setOpportunitySearch(nextOpportunitySearch);
       setSelectedOpportunityKeys([]);
       await refreshDrafts();
@@ -1223,6 +1290,7 @@ export function CmoWorkspace({
         {activeSection === "diagnostico" ? (
           <CmoDiagnosticSection
             orgId={orgId}
+            portfolioSnapshot={portfolioSnapshot}
             loadingProfile={loadingProfile}
             loadingDrafts={loadingDrafts}
             savingProfile={savingProfile}
@@ -1233,6 +1301,24 @@ export function CmoWorkspace({
             generatingBriefs={generatingBriefs}
             period={period}
             objective={objective}
+            opportunitySearchContext={{
+              runId: opportunitySearch?.id || null,
+              requestedAt: lastOpportunitySearchRequest?.requestedAt || null,
+              companyProfileName:
+                lastOpportunitySearchRequest?.companyProfileName || companyProfile.name || "Sem nome",
+              portfolioSnapshotId:
+                lastOpportunitySearchRequest?.portfolioSnapshotId ||
+                portfolioSnapshot?.id ||
+                null,
+              previousOpportunitySearchId:
+                lastOpportunitySearchRequest?.previousOpportunitySearchId || null,
+              previousOpportunitySearchTitle:
+                lastOpportunitySearchRequest?.previousOpportunitySearchTitle || null,
+              queriesCount: Array.isArray(opportunitySearch?.queries)
+                ? opportunitySearch.queries.length
+                : 0,
+            }}
+            cmoRunTrace={cmoRunTrace}
             companyProfile={companyProfile as any}
             profileFormValue={profileFormValue}
             calendarItems={calendarItems}
@@ -1288,6 +1374,8 @@ export function CmoWorkspace({
             briefGenerationReady={briefGenerationReady}
             briefGenerationIssues={briefGenerationIssues}
             strategyId={strategy?.id}
+            portfolioSnapshot={portfolioSnapshot}
+            cmoRunTrace={cmoRunTrace}
             uniqueBriefItems={uniqueBriefItems as any}
             pautaIaItemsCount={pautaIaItems.length}
             pautaUserItemsCount={pautaUserItems.length}

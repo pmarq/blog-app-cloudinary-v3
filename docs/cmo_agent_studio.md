@@ -84,6 +84,31 @@ Ele deve responder rapidamente:
 6. abrir o rascunho;
 7. seguir para o editor final.
 
+### Sequência operacional obrigatória
+
+1. **Perfil da empresa** — define posicionamento, guardrails e público.
+2. **Analisar portfólio** — consolida o estado atual dos produtos ativos.
+3. **Buscar oportunidades** — cruza perfil + portfólio + sinais externos e gera um `opportunitySearchId`.
+4. **Gerar estratégia** — transforma as oportunidades selecionadas em direção editorial e gera `strategyId`.
+5. **Gerar calendário** — converte a estratégia em cadência e gera `calendarRunId`.
+6. **Gerar briefs** — converte calendário + contexto em pautas executáveis e gera `briefRunId`.
+7. **Revisar e aprovar** — filtra ruído, aprova o que faz sentido e envia para agenda ou editor.
+
+### O que cada etapa entrega
+
+- **Busca de oportunidades**: resumo executivo, oportunidades priorizadas, evidências e trilha do run.
+- **Estratégia**: diagnóstico, mercado, riscos, canais recomendados e pilares de conteúdo.
+- **Calendário**: itens editoriais com tema, canal, objetivo e base de origem.
+- **Briefs**: pauta detalhada com objetivo, ângulo, CTAs, fontes e sinais que originaram o item.
+
+### Regra de uso
+
+- não avançar para estratégia sem perfil minimamente preenchido;
+- não avançar para calendário sem estratégia válida;
+- não avançar para briefs sem calendário;
+- não tratar oportunidade, estratégia, calendário e briefs como estados desconectados;
+- sempre preservar o `runId` de cada etapa para auditoria e rastreabilidade.
+
 ---
 
 ## 4. Perfil da empresa
@@ -115,6 +140,17 @@ Ele precisa ser configurável por `orgId` e nunca hardcoded.
 - assuntos preferenciais;
 - canais;
 - estilo de comunicação.
+
+### Critério mínimo para seguir o fluxo
+
+O perfil só deve ser considerado pronto quando tiver, no mínimo:
+
+- nome;
+- posicionamento;
+- proposta de valor;
+- público-alvo;
+- regiões atendidas;
+- objetivos comerciais.
 
 ### UI recomendada
 
