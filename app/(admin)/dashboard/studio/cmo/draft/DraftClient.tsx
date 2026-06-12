@@ -334,14 +334,43 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
       <div className="max-w-5xl space-y-6">
         <StudioNav />
 
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold text-highlight-light dark:text-highlight-dark">
-            Rascunho do texto
-          </h1>
-          <p className="text-sm text-secondary-dark dark:text-secondary-light">
-            Etapa intermediária: a IA gera o texto, você revisa e só então envia para o editor final.
-          </p>
-        </div>
+        <section className="rounded-2xl border border-secondary-dark/15 dark:border-secondary-light/15 bg-gradient-to-br from-highlight-light/10 via-white/35 to-white/10 dark:from-highlight-dark/10 dark:via-black/10 dark:to-black/20 p-6 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-highlight-light/20 bg-white/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-highlight-light dark:border-highlight-dark/20 dark:bg-black/20 dark:text-highlight-dark">
+              CMO Studio
+            </div>
+            <div className="rounded-full border border-secondary-dark/15 bg-white/50 px-3 py-1 text-[11px] font-medium text-secondary-dark/70 dark:border-secondary-light/15 dark:bg-black/15 dark:text-secondary-light/70">
+              Rascunho editorial
+            </div>
+          </div>
+          <div className="mt-4 space-y-3">
+            <h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-secondary-dark dark:text-secondary-light">
+              Gere e revise o texto antes de enviar para o editor final.
+            </h1>
+            <p className="max-w-3xl text-sm leading-6 text-secondary-dark/80 dark:text-secondary-light/80">
+              Esta etapa consolida o brief em um rascunho editável, com apoio de fontes internas e contexto já aprovado.
+            </p>
+          </div>
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            {[
+              { label: "Canal", value: briefChannel || "blog", detail: "destino principal do texto" },
+              { label: "Origem", value: briefSourceType || "calendário", detail: "fonte principal da pauta" },
+              { label: "Fontes", value: String(totalSources), detail: "itens usados na geração" },
+            ].map((metric) => (
+              <div key={metric.label} className="rounded-xl border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/60 dark:bg-black/20 p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-secondary-dark/60 dark:text-secondary-light/60">
+                  {metric.label}
+                </div>
+                <div className="mt-2 text-2xl font-semibold text-secondary-dark dark:text-secondary-light">
+                  {metric.value}
+                </div>
+                <div className="mt-1 text-xs leading-5 text-secondary-dark/70 dark:text-secondary-light/70">
+                  {metric.detail}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
 
         <section className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-secondary-light/10 dark:bg-secondary-dark/20 p-4 space-y-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -370,56 +399,61 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
             </div>
           ) : null}
 
-          <div className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
-                Origem do brief
+          <details className="rounded border border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3 space-y-2">
+            <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-wide text-highlight-light">
+              Origem do brief
+            </summary>
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                  Fonte principal
+                </div>
+                <div className="text-[11px] text-secondary-dark/60 dark:text-secondary-light/60">
+                  {briefContext?.sourceType ? `Origem: ${briefContext.sourceType}` : briefSourceType ? `Origem: ${briefSourceType}` : "Origem: calend?rio"}
+                </div>
               </div>
-              <div className="text-[11px] text-secondary-dark/60 dark:text-secondary-light/60">
-                {briefContext?.sourceType ? `Origem: ${briefContext.sourceType}` : briefSourceType ? `Origem: ${briefSourceType}` : "Origem: calend?rio"}
-              </div>
+              {uniqueStrings([
+                ...(briefContext?.sourceSignals?.calendarTitle ? [briefContext.sourceSignals.calendarTitle] : []),
+                ...(briefContext?.sourceSignals?.calendarScope ? [briefContext.sourceSignals.calendarScope] : []),
+                ...(briefContext?.sourceSignals?.calendarTheme ? [briefContext.sourceSignals.calendarTheme] : []),
+                ...(briefContext?.sourceSignals?.portfolioRegions || []),
+                ...(briefContext?.sourceSignals?.portfolioCities || []),
+                ...(briefContext?.sourceSignals?.portfolioSegments || []),
+                ...(briefContext?.sourceSignals?.opportunityTitles || []),
+                ...(briefContext?.sourceSignals?.opportunityScopes || []),
+                ...(briefContext?.sourceSignals?.opportunityRegions || []),
+                ...(briefContext?.sourceSignals?.strategyPillars || []),
+              ]).length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {uniqueStrings([
+                    ...(briefContext?.sourceSignals?.calendarTitle ? [briefContext.sourceSignals.calendarTitle] : []),
+                    ...(briefContext?.sourceSignals?.calendarScope ? [briefContext.sourceSignals.calendarScope] : []),
+                    ...(briefContext?.sourceSignals?.calendarTheme ? [briefContext.sourceSignals.calendarTheme] : []),
+                    ...(briefContext?.sourceSignals?.portfolioRegions || []),
+                    ...(briefContext?.sourceSignals?.portfolioCities || []),
+                    ...(briefContext?.sourceSignals?.portfolioSegments || []),
+                    ...(briefContext?.sourceSignals?.opportunityTitles || []),
+                    ...(briefContext?.sourceSignals?.opportunityScopes || []),
+                    ...(briefContext?.sourceSignals?.opportunityRegions || []),
+                    ...(briefContext?.sourceSignals?.strategyPillars || []),
+                  ])
+                    .slice(0, 8)
+                    .map((chip) => (
+                      <span
+                        key={`${briefId || "draft"}-${chip}`}
+                        className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5 text-[10px] text-secondary-dark/70 dark:text-secondary-light/70"
+                      >
+                        {chip}
+                      </span>
+                    ))}
+                </div>
+              ) : (
+                <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
+                  Este rascunho n?o trouxe sinais persistidos de origem.
+                </div>
+              )}
             </div>
-            {uniqueStrings([
-              ...(briefContext?.sourceSignals?.calendarTitle ? [briefContext.sourceSignals.calendarTitle] : []),
-              ...(briefContext?.sourceSignals?.calendarScope ? [briefContext.sourceSignals.calendarScope] : []),
-              ...(briefContext?.sourceSignals?.calendarTheme ? [briefContext.sourceSignals.calendarTheme] : []),
-              ...(briefContext?.sourceSignals?.portfolioRegions || []),
-              ...(briefContext?.sourceSignals?.portfolioCities || []),
-              ...(briefContext?.sourceSignals?.portfolioSegments || []),
-              ...(briefContext?.sourceSignals?.opportunityTitles || []),
-              ...(briefContext?.sourceSignals?.opportunityScopes || []),
-              ...(briefContext?.sourceSignals?.opportunityRegions || []),
-              ...(briefContext?.sourceSignals?.strategyPillars || []),
-            ]).length ? (
-              <div className="flex flex-wrap gap-1.5">
-                {uniqueStrings([
-                  ...(briefContext?.sourceSignals?.calendarTitle ? [briefContext.sourceSignals.calendarTitle] : []),
-                  ...(briefContext?.sourceSignals?.calendarScope ? [briefContext.sourceSignals.calendarScope] : []),
-                  ...(briefContext?.sourceSignals?.calendarTheme ? [briefContext.sourceSignals.calendarTheme] : []),
-                  ...(briefContext?.sourceSignals?.portfolioRegions || []),
-                  ...(briefContext?.sourceSignals?.portfolioCities || []),
-                  ...(briefContext?.sourceSignals?.portfolioSegments || []),
-                  ...(briefContext?.sourceSignals?.opportunityTitles || []),
-                  ...(briefContext?.sourceSignals?.opportunityScopes || []),
-                  ...(briefContext?.sourceSignals?.opportunityRegions || []),
-                  ...(briefContext?.sourceSignals?.strategyPillars || []),
-                ])
-                  .slice(0, 8)
-                  .map((chip) => (
-                    <span
-                      key={`${briefId || "draft"}-${chip}`}
-                      className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5 text-[10px] text-secondary-dark/70 dark:text-secondary-light/70"
-                    >
-                      {chip}
-                    </span>
-                  ))}
-              </div>
-            ) : (
-              <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
-                Este rascunho n?o trouxe sinais persistidos de origem.
-              </div>
-            )}
-          </div>
+          </details>
 
           <div className="flex flex-wrap gap-2">
             <button
@@ -432,10 +466,18 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
             </button>
             <button
               type="button"
-              onClick={() => router.push(`/dashboard/studio/cmo?briefId=${encodeURIComponent(briefId)}`)}
+              onClick={() => router.push(`/dashboard/studio/cmo/briefs/${encodeURIComponent(briefId)}/edit`)}
               className="rounded border border-secondary-dark/30 px-4 py-2 text-sm transition hover:bg-secondary-light/20 dark:border-secondary-light/30"
             >
-              Voltar ao CMO
+              Voltar ao brief
+            </button>
+            <button
+              type="button"
+              onClick={() => void openInEditor()}
+              disabled={!content?.body}
+              className="rounded border border-secondary-dark/30 px-4 py-2 text-sm transition hover:bg-secondary-light/20 dark:border-secondary-light/30 disabled:opacity-60"
+            >
+              Abrir no editor final
             </button>
           </div>
         </section>
@@ -497,10 +539,10 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
               </button>
               <button
                 type="button"
-                onClick={() => void generateContent()}
+                onClick={() => router.push(`/dashboard/studio/cmo/briefs/${encodeURIComponent(briefId)}/edit`)}
                 className="text-xs px-3 py-2 rounded border border-secondary-dark/40 dark:border-secondary-light/30 hover:bg-secondary-light/20 dark:hover:bg-secondary-dark/30 transition"
               >
-                Regerar
+                Voltar ao brief
               </button>
               <button
                 type="button"
@@ -508,7 +550,7 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
                 disabled={!content?.body}
                 className="text-xs px-3 py-2 rounded border border-highlight-light text-highlight-light hover:bg-secondary-light/20 transition disabled:opacity-60"
               >
-              Abrir texto no editor final
+                Abrir no editor final
               </button>
             </div>
           </div>
