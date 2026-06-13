@@ -1,4 +1,5 @@
 ﻿import { useMemo } from "react";
+import { buildPortfolioSnapshotFrame } from "./cmo-domain";
 
 type CompanyProfileValue = {
   name: string;
@@ -12,11 +13,33 @@ type CompanyProfileValue = {
   forbiddenTopics: string[];
   preferredTopics: string[];
   channels: string[];
+  editorialConfig?: {
+    focusDomains?: string[];
+    seedThemes?: string[];
+    mixTargets?: {
+      territorio?: number;
+      produto?: number;
+      autoridade?: number;
+      institucional?: number;
+    };
+  };
 };
 
 type DiagnosticSectionProps = {
   orgId: string;
   portfolioSnapshot: {
+    realizationIndex?: {
+      coverage?: {
+        builderCount?: number;
+        developerCount?: number;
+        architectureFirmCount?: number;
+        constructionStageCount?: number;
+      };
+      builders?: Array<{ name: string; count: number }>;
+      developers?: Array<{ name: string; count: number }>;
+      architectureFirms?: Array<{ name: string; count: number }>;
+      constructionStages?: Array<{ name: string; count: number }>;
+    };
     territorialIndex?: {
       coverage?: {
         projectCount?: number;
@@ -60,19 +83,65 @@ type DiagnosticSectionProps = {
   opportunitySummary: {
     count: number;
     selectedCount: number;
+    editorialGapSuggestions: Array<{
+      key: string;
+      label: string;
+      prompt: string;
+    }>;
+    macrothemes: Array<{
+      label: string;
+      count: number;
+    }>;
+    editorialMixSummary: Array<{
+      key: string;
+      label: string;
+      target: number;
+      actual: number;
+      count: number;
+    }>;
     items: Array<{
       key: string;
       selected: boolean;
       title: string;
+      theme?: string | null;
+      editorialType?: string | null;
+      territory?: string;
+      macrotheme?: string;
+      builder?: string;
+      stage?: string;
       scope: string;
       fitScore: number;
       relatedRegions?: string[];
       suggestedContents?: string[];
     }>;
+    groups: Array<{
+      key: string;
+      label: string;
+      count: number;
+      selectedCount: number;
+      averagePriority: number;
+      items: Array<{
+        key: string;
+        selected: boolean;
+        title: string;
+        theme?: string | null;
+        editorialType?: string | null;
+        territory?: string;
+        macrotheme?: string;
+        builder?: string;
+        stage?: string;
+        editorialPriority?: number | null;
+        scope: string;
+        fitScore: number;
+        relatedRegions?: string[];
+        suggestedContents?: string[];
+      }>;
+    }>;
   };
   selectedOpportunityKeys: string[];
   onToggleOpportunitySelection: (key: string) => void;
   onClearOpportunitySelection: () => void;
+  onExploreEditorialGap: (key: string) => void;
   companyProfile: CompanyProfileValue;
   profileFormValue: {
     audience: string;
@@ -82,7 +151,47 @@ type DiagnosticSectionProps = {
     forbiddenTopics: string;
     preferredTopics: string;
     channels: string;
+    editorialFocusDomains: string;
+    editorialSeedThemes: string;
+    editorialMixTargets: string;
   };
+  profileTextareaFormValue: {
+    audience: string;
+    commercialGoals: string;
+    marketSegment: string;
+    regions: string;
+    forbiddenTopics: string;
+    preferredTopics: string;
+    channels: string;
+    editorialFocusDomains: string;
+    editorialSeedThemes: string;
+    editorialMixTargets: string;
+  };
+  onProfileTextareaChange: (
+    updater: (previous: {
+      audience: string;
+      commercialGoals: string;
+      marketSegment: string;
+      regions: string;
+      forbiddenTopics: string;
+      preferredTopics: string;
+      channels: string;
+      editorialFocusDomains: string;
+      editorialSeedThemes: string;
+      editorialMixTargets: string;
+    }) => {
+      audience: string;
+      commercialGoals: string;
+      marketSegment: string;
+      regions: string;
+      forbiddenTopics: string;
+      preferredTopics: string;
+      channels: string;
+      editorialFocusDomains: string;
+      editorialSeedThemes: string;
+      editorialMixTargets: string;
+    },
+  ) => void;
   calendarItems: Array<{
     id?: string;
     calendarRunId?: string | null;
@@ -100,6 +209,26 @@ type DiagnosticSectionProps = {
   onSaveProfile: () => void;
   onAnalyzePortfolio: () => void;
   onSearchOpportunities: () => void;
+  onApplyEditorialPreset: (presetKey: string) => void;
+  recommendedEditorialPreset: {
+    key: string;
+    label: string;
+    reason: string;
+  };
+  recommendedEditorialConfig: {
+    label: string;
+    description: string;
+    focusDomains: string[];
+    seedThemes: string[];
+    mixTargets: {
+      territorio: number;
+      produto: number;
+      autoridade: number;
+      institucional: number;
+    };
+    preferredTopics: string[];
+  };
+  recommendedEditorialSignals: string[];
   onGenerateStrategy: () => void;
   onGenerateCalendar: () => void;
   onGenerateBriefs: () => void;
@@ -138,14 +267,21 @@ export function CmoDiagnosticSection({
   selectedOpportunityKeys,
   onToggleOpportunitySelection,
   onClearOpportunitySelection,
+  onExploreEditorialGap,
   companyProfile,
   profileFormValue,
+  profileTextareaFormValue,
+  onProfileTextareaChange,
   calendarItems,
   strategyObjective,
   onProfileChange,
   onSaveProfile,
   onAnalyzePortfolio,
   onSearchOpportunities,
+  onApplyEditorialPreset,
+  recommendedEditorialPreset,
+  recommendedEditorialConfig,
+  recommendedEditorialSignals,
   onGenerateStrategy,
   onGenerateCalendar,
   onGenerateBriefs,
@@ -176,31 +312,14 @@ export function CmoDiagnosticSection({
     }),
     [calendarItems, strategyObjective],
   );
-  const territorialSnapshot = useMemo(() => {
-    const territorialIndex = portfolioSnapshot?.territorialIndex || null;
-    const topNeighborhoods = uniqueStrings([
-      ...(territorialIndex?.focusNeighborhoods || []),
-      ...(portfolioSnapshot?.mainNeighborhoods || []),
-    ]);
-    const topCities = uniqueStrings([
-      ...(territorialIndex?.focusCities || []),
-      ...(portfolioSnapshot?.mainCities || []),
-    ]);
-    const coverage =
-      territorialIndex?.coverage?.neighborhoodCount || territorialIndex?.coverage?.cityCount
-        ? `${territorialIndex?.coverage?.neighborhoodCount || 0} bairros • ${territorialIndex?.coverage?.cityCount || 0} cidades`
-        : `${topNeighborhoods.length} bairros • ${topCities.length} cidades`;
+  const territorialSnapshot = useMemo(() => buildPortfolioSnapshotFrame(portfolioSnapshot), [portfolioSnapshot]);
 
-    return {
-      summary:
-        territorialIndex?.territorialSummary ||
-        portfolioSnapshot?.strategicSummary ||
-        "Sem índice territorial disponível.",
-      topNeighborhoods: topNeighborhoods.slice(0, 6),
-      topCities: topCities.slice(0, 4),
-      coverage,
-    };
-  }, [portfolioSnapshot]);
+  const setTextareaDraft = (field: keyof typeof profileTextareaFormValue, value: string) => {
+    onProfileTextareaChange((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
+  };
 
   return (
     <section id="cmo-diagnostico" className="space-y-4">
@@ -314,19 +433,15 @@ export function CmoDiagnosticSection({
               />
               <TextAreaField
                 label="Público-alvo"
-                value={profileFormValue.audience}
-                onChange={(value) =>
-                  onProfileChange((prev) => ({ ...prev, audience: fromLines(value) }))
-                }
+                value={profileTextareaFormValue.audience}
+                onChange={(value) => setTextareaDraft("audience", value)}
                 rows={6}
                 placeholder="Uma linha por segmento ou característica do público."
               />
               <TextAreaField
                 label="Objetivos comerciais"
-                value={profileFormValue.commercialGoals}
-                onChange={(value) =>
-                  onProfileChange((prev) => ({ ...prev, commercialGoals: fromLines(value) }))
-                }
+                value={profileTextareaFormValue.commercialGoals}
+                onChange={(value) => setTextareaDraft("commercialGoals", value)}
                 rows={6}
                 placeholder="Uma linha por objetivo comercial."
               />
@@ -340,38 +455,47 @@ export function CmoDiagnosticSection({
             <div className="mt-3 grid gap-3">
               <TextAreaField
                 label="Segmentos de atuação"
-                value={profileFormValue.marketSegment}
-                onChange={(value) =>
-                  onProfileChange((prev) => ({ ...prev, marketSegment: fromLines(value) }))
-                }
+                value={profileTextareaFormValue.marketSegment}
+                onChange={(value) => setTextareaDraft("marketSegment", value)}
               />
               <TextAreaField
                 label="Regiões atendidas"
-                value={profileFormValue.regions}
-                onChange={(value) =>
-                  onProfileChange((prev) => ({ ...prev, regions: fromLines(value) }))
-                }
+                value={profileTextareaFormValue.regions}
+                onChange={(value) => setTextareaDraft("regions", value)}
               />
               <TextAreaField
                 label="Assuntos proibidos"
-                value={profileFormValue.forbiddenTopics}
-                onChange={(value) =>
-                  onProfileChange((prev) => ({ ...prev, forbiddenTopics: fromLines(value) }))
-                }
+                value={profileTextareaFormValue.forbiddenTopics}
+                onChange={(value) => setTextareaDraft("forbiddenTopics", value)}
               />
               <TextAreaField
                 label="Assuntos preferenciais"
-                value={profileFormValue.preferredTopics}
-                onChange={(value) =>
-                  onProfileChange((prev) => ({ ...prev, preferredTopics: fromLines(value) }))
-                }
+                value={profileTextareaFormValue.preferredTopics}
+                onChange={(value) => setTextareaDraft("preferredTopics", value)}
               />
               <TextAreaField
                 label="Canais"
-                value={profileFormValue.channels}
-                onChange={(value) =>
-                  onProfileChange((prev) => ({ ...prev, channels: fromLines(value) }))
-                }
+                value={profileTextareaFormValue.channels}
+                onChange={(value) => setTextareaDraft("channels", value)}
+              />
+              <TextAreaField
+                label="Taxonomia editorial"
+                value={profileTextareaFormValue.editorialFocusDomains}
+                onChange={(value) => setTextareaDraft("editorialFocusDomains", value)}
+                placeholder="Uma linha por domínio: economia, construtoras, arquitetura, produto, branding, tecnologia, mercado, território"
+              />
+              <TextAreaField
+                label="Temas de descoberta"
+                value={profileTextareaFormValue.editorialSeedThemes}
+                onChange={(value) => setTextareaDraft("editorialSeedThemes", value)}
+                placeholder="Uma linha por tema: blockchain, B3, portfólio, mercado premium, qualidade construtiva"
+              />
+              <TextAreaField
+                label="Mix editorial alvo"
+                value={profileTextareaFormValue.editorialMixTargets}
+                onChange={(value) => setTextareaDraft("editorialMixTargets", value)}
+                rows={4}
+                placeholder="territorio:40\nproduto:30\nautoridade:20\ninstitucional:10"
               />
             </div>
           </details>
@@ -403,6 +527,87 @@ export function CmoDiagnosticSection({
             </button>
           </div>
 
+          <div className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/20 dark:bg-black/10 p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary-dark/70 dark:text-secondary-light/70">
+              Preset recomendado
+            </div>
+            <div className="mt-1 text-sm font-semibold text-secondary-dark dark:text-secondary-light">
+              {recommendedEditorialPreset.label}
+            </div>
+            <div className="mt-1 text-[11px] text-secondary-dark/70 dark:text-secondary-light/70">
+              {recommendedEditorialPreset.reason}
+            </div>
+            {recommendedEditorialSignals.length ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {recommendedEditorialSignals.slice(0, 4).map((signal) => (
+                  <span
+                    key={signal}
+                    className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5 text-[10px] text-secondary-dark/70 dark:text-secondary-light/70"
+                  >
+                    {signal}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+              <div className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/30 dark:bg-black/10 p-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary-dark/70 dark:text-secondary-light/70">
+                  Domínios
+                </div>
+                <div className="mt-1 text-[11px] text-secondary-dark/75 dark:text-secondary-light/75">
+                  {recommendedEditorialConfig.focusDomains.join(" • ")}
+                </div>
+              </div>
+              <div className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/30 dark:bg-black/10 p-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary-dark/70 dark:text-secondary-light/70">
+                  Temas
+                </div>
+                <div className="mt-1 text-[11px] text-secondary-dark/75 dark:text-secondary-light/75">
+                  {recommendedEditorialConfig.seedThemes.join(" • ")}
+                </div>
+              </div>
+            </div>
+            <div className="mt-2 rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/30 dark:bg-black/10 p-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary-dark/70 dark:text-secondary-light/70">
+                Mix alvo
+              </div>
+              <div className="mt-1 text-[11px] text-secondary-dark/75 dark:text-secondary-light/75">
+                Território {recommendedEditorialConfig.mixTargets.territorio}% • Produto {recommendedEditorialConfig.mixTargets.produto}% • Autoridade {recommendedEditorialConfig.mixTargets.autoridade}% • Institucional {recommendedEditorialConfig.mixTargets.institucional}%
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onApplyEditorialPreset(recommendedEditorialPreset.key)}
+              className="mt-2 rounded border border-highlight-light px-3 py-1 text-xs font-semibold text-highlight-light transition hover:bg-secondary-light/20"
+            >
+              Aplicar recomendado
+            </button>
+          </div>
+
+          <div className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/20 dark:bg-black/10 p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary-dark/70 dark:text-secondary-light/70">
+              Presets editoriais
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {[
+                { key: "balanced", label: "Equilibrado" },
+                { key: "premium", label: "Mercado premium" },
+                { key: "market", label: "Mercado e portfólio" },
+                { key: "technology", label: "Tecnologia" },
+                { key: "authority", label: "Autoridade" },
+              ].map((preset) => (
+                <button
+                  key={preset.key}
+                  type="button"
+                  onClick={() => onApplyEditorialPreset(preset.key)}
+                  className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-3 py-1 text-[10px] text-secondary-dark/75 dark:text-secondary-light/75 transition hover:border-highlight-light hover:text-highlight-light"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
             {searchingOpportunities
               ? "Buscando oportunidades de mercado..."
@@ -431,11 +636,27 @@ export function CmoDiagnosticSection({
             </div>
             <div>
               <div className="font-semibold text-secondary-dark dark:text-secondary-light">Índice territorial</div>
-              <div>{territorialSnapshot.coverage}</div>
+              <div>{territorialSnapshot.coverageLabel}</div>
               <div className="mt-1">
                 {territorialSnapshot.topNeighborhoods.length
                   ? territorialSnapshot.topNeighborhoods.slice(0, 4).join(" • ")
                   : "Sem bairros priorizados"}
+              </div>
+            </div>
+            <div>
+              <div className="font-semibold text-secondary-dark dark:text-secondary-light">Construtoras</div>
+              <div className="mt-1">
+                {territorialSnapshot.topBuilders.length
+                  ? territorialSnapshot.topBuilders.slice(0, 4).join(" • ")
+                  : "Sem construtoras priorizadas"}
+              </div>
+            </div>
+            <div>
+              <div className="font-semibold text-secondary-dark dark:text-secondary-light">Estágio</div>
+              <div className="mt-1">
+                {territorialSnapshot.topStages.length
+                  ? territorialSnapshot.topStages.slice(0, 4).join(" • ")
+                  : "Sem estágio construtivo priorizado"}
               </div>
             </div>
             <div>
@@ -468,6 +689,72 @@ export function CmoDiagnosticSection({
               <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-highlight-light">
                 Oportunidades encontradas
               </summary>
+              {opportunitySummary.editorialGapSuggestions.length ? (
+                <div className="mt-3 rounded border border-dashed border-secondary-dark/20 dark:border-secondary-light/20 bg-white/20 dark:bg-black/10 p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary-dark/70 dark:text-secondary-light/70">
+                    Lacunas editoriais
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {opportunitySummary.editorialGapSuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion.key}
+                        type="button"
+                        onClick={() => onExploreEditorialGap(suggestion.key)}
+                        className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-3 py-1 text-left text-[10px] text-secondary-dark/75 dark:text-secondary-light/75 transition hover:border-highlight-light hover:text-highlight-light"
+                        title={suggestion.prompt}
+                      >
+                        <span className="block font-semibold">{suggestion.label}</span>
+                        <span className="block opacity-80">{suggestion.prompt}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {opportunitySummary.editorialMixSummary.length ? (
+                <div className="mt-3 rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/20 dark:bg-black/10 p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary-dark/70 dark:text-secondary-light/70">
+                    Mix editorial recomendado
+                  </div>
+                  <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                    {opportunitySummary.editorialMixSummary.map((bucket) => {
+                      const delta = bucket.actual - bucket.target;
+                      return (
+                        <div
+                          key={bucket.key}
+                          className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/30 dark:bg-black/10 p-2"
+                        >
+                          <div className="text-[11px] font-semibold text-secondary-dark dark:text-secondary-light">
+                            {bucket.label}
+                          </div>
+                          <div className="mt-1 text-[11px] text-secondary-dark/70 dark:text-secondary-light/70">
+                            alvo {bucket.target}% • atual {bucket.actual}% • {bucket.count} itens
+                          </div>
+                          <div className={`mt-1 text-[10px] font-medium ${delta > 5 ? "text-amber-500" : delta < -5 ? "text-sky-500" : "text-emerald-500"}`}>
+                            {delta > 0 ? `acima do alvo em ${delta}%` : delta < 0 ? `abaixo do alvo em ${Math.abs(delta)}%` : "no alvo"}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+              {opportunitySummary.macrothemes.length ? (
+                <div className="mt-3 rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/20 dark:bg-black/10 p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary-dark/70 dark:text-secondary-light/70">
+                    Macrotemas encontrados
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {opportunitySummary.macrothemes.map((macrotheme) => (
+                      <span
+                        key={macrotheme.label}
+                        className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-3 py-1 text-[10px] text-secondary-dark/75 dark:text-secondary-light/75"
+                      >
+                        {macrotheme.label} • {macrotheme.count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
                   Selecione as oportunidades que devem orientar estratégia, pautas e textos.
@@ -481,98 +768,139 @@ export function CmoDiagnosticSection({
                   Limpar seleção
                 </button>
               </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {opportunitySummary.items.map((item) => (
-                  <div
-                    key={item.key}
-                    className={`rounded-lg border p-3 transition ${
-                      item.selected
-                        ? "border-highlight-light bg-highlight-light/10 dark:border-highlight-dark dark:bg-highlight-dark/10"
-                        : "border-secondary-dark/15 dark:border-secondary-light/15 bg-white/30 dark:bg-black/10"
-                    }`}
-                  >
-                    <details>
-                      <summary className="cursor-pointer list-none">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="space-y-1">
-                            <div className="text-xs font-semibold text-secondary-dark dark:text-secondary-light">
-                              {item.title}
-                            </div>
-                            <div className="text-[11px] font-medium text-secondary-dark/85 dark:text-secondary-light/75">
-                              {item.scope} • fit {item.fitScore}
-                            </div>
-                          </div>
-                          <span
-                            className={`rounded-full border px-2 py-0.5 text-[9px] font-medium ${
-                              item.selected
-                                ? "border-highlight-light bg-highlight-light/10 text-highlight-light"
-                                : "border-secondary-dark/15 dark:border-secondary-light/15 text-secondary-dark/70 dark:text-secondary-light/70"
-                            }`}
-                          >
-                            {item.selected ? "Selecionada" : "Selecionar"}
-                          </span>
-                        </div>
-                      </summary>
-                      {(() => {
-                        const opportunityRegions = uniqueStrings(item.relatedRegions || []);
-                        const matchedRegions = opportunityRegions.filter(
-                          (region) =>
-                            territorialSnapshot.topNeighborhoods.includes(region) ||
-                            territorialSnapshot.topCities.includes(region),
-                        );
-                        const unmatchedRegions = opportunityRegions.filter(
-                          (region) =>
-                            !territorialSnapshot.topNeighborhoods.includes(region) &&
-                            !territorialSnapshot.topCities.includes(region),
-                        );
-
-                        return (
-                      <div className="mt-3 space-y-3">
-                        <div className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 p-2">
-                          <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary-dark/70 dark:text-secondary-light/70">
-                            Origem territorial
-                          </div>
-                          <div className="mt-1 text-[11px] text-secondary-dark/75 dark:text-secondary-light/70">
-                            {matchedRegions.length
-                              ? `A oportunidade conversa com o portfólio em ${matchedRegions.slice(0, 3).join(" • ")}.`
-                              : "Ainda não cruza diretamente com os bairros priorizados do portfólio."}
-                          </div>
-                          {unmatchedRegions.length ? (
-                            <div className="mt-2 text-[10px] text-secondary-dark/60 dark:text-secondary-light/60">
-                              Regiões citadas: {unmatchedRegions.slice(0, 3).join(" • ")}
-                            </div>
-                          ) : null}
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {item.relatedRegions?.slice(0, 3).map((region) => (
-                            <span
-                              key={`${item.key}-${region}`}
-                              className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5 text-[9px] font-medium text-secondary-dark/90 dark:text-secondary-light/80"
-                            >
-                              {region}
-                            </span>
-                          ))}
-                        </div>
-                        {item.suggestedContents?.length ? (
-                          <div className="space-y-1">
-                            {item.suggestedContents.slice(0, 2).map((line) => (
-                              <div key={`${item.key}-${line}`} className="text-[11px] text-secondary-dark/75 dark:text-secondary-light/75">
-                                • {line}
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() => onToggleOpportunitySelection(item.key)}
-                          className="rounded border border-secondary-dark/20 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/20"
-                        >
-                          {item.selected ? "Remover da seleção" : "Adicionar à seleção"}
-                        </button>
+              <div className="mt-3 space-y-4">
+                {opportunitySummary.groups.map((group) => (
+                  <div key={group.key} className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-secondary-dark/70 dark:text-secondary-light/70">
+                        {group.label}
                       </div>
-                        );
-                      })()}
-                    </details>
+                      <div className="text-[11px] text-secondary-dark/60 dark:text-secondary-light/60">
+                        {group.count} itens • {group.selectedCount} selecionados • prioridade média {group.averagePriority}
+                      </div>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {group.items.map((item) => (
+                        <div
+                          key={item.key}
+                          className={`rounded-lg border p-3 transition ${
+                            item.selected
+                              ? "border-highlight-light bg-highlight-light/10 dark:border-highlight-dark dark:bg-highlight-dark/10"
+                              : "border-secondary-dark/15 dark:border-secondary-light/15 bg-white/30 dark:bg-black/10"
+                          }`}
+                        >
+                          <details>
+                            <summary className="cursor-pointer list-none">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="space-y-1">
+                                  <div className="text-xs font-semibold text-secondary-dark dark:text-secondary-light">
+                                    {item.title}
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5 text-[10px] font-medium text-secondary-dark/70 dark:text-secondary-light/70">
+                                    {item.territory ? (
+                                      <span className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5">
+                                        {item.territory}
+                                      </span>
+                                    ) : null}
+                                    {item.macrotheme ? (
+                                      <span className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5">
+                                        {item.macrotheme}
+                                      </span>
+                                    ) : null}
+                                    {item.builder ? (
+                                      <span className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5">
+                                        {item.builder}
+                                      </span>
+                                    ) : null}
+                                    {item.stage ? (
+                                      <span className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5">
+                                        {item.stage}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <div className="text-[11px] font-medium text-secondary-dark/85 dark:text-secondary-light/75">
+                                    {item.scope} • fit {item.fitScore} • pri {item.editorialPriority ?? 0}
+                                  </div>
+                                  {item.theme ? (
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-highlight-light">
+                                      {item.theme}
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <span
+                                  className={`rounded-full border px-2 py-0.5 text-[9px] font-medium ${
+                                    item.selected
+                                      ? "border-highlight-light bg-highlight-light/10 text-highlight-light"
+                                      : "border-secondary-dark/15 dark:border-secondary-light/15 text-secondary-dark/70 dark:text-secondary-light/70"
+                                  }`}
+                                >
+                                  {item.selected ? "Selecionada" : "Selecionar"}
+                                </span>
+                              </div>
+                            </summary>
+                            {(() => {
+                              const opportunityRegions = uniqueStrings(item.relatedRegions || []);
+                              const matchedRegions = opportunityRegions.filter(
+                                (region) =>
+                                  territorialSnapshot.topNeighborhoods.includes(region) ||
+                                  territorialSnapshot.topCities.includes(region),
+                              );
+                              const unmatchedRegions = opportunityRegions.filter(
+                                (region) =>
+                                  !territorialSnapshot.topNeighborhoods.includes(region) &&
+                                  !territorialSnapshot.topCities.includes(region),
+                              );
+
+                              return (
+                                <div className="mt-3 space-y-3">
+                                  <div className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 p-2">
+                                    <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary-dark/70 dark:text-secondary-light/70">
+                                      Origem territorial
+                                    </div>
+                                    <div className="mt-1 text-[11px] text-secondary-dark/75 dark:text-secondary-light/70">
+                                      {matchedRegions.length
+                                        ? `A oportunidade conversa com o portfólio em ${matchedRegions.slice(0, 3).join(" • ")}.`
+                                        : "Ainda não cruza diretamente com os bairros priorizados do portfólio."}
+                                    </div>
+                                    {unmatchedRegions.length ? (
+                                      <div className="mt-2 text-[10px] text-secondary-dark/60 dark:text-secondary-light/60">
+                                        Regiões citadas: {unmatchedRegions.slice(0, 3).join(" • ")}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {item.relatedRegions?.slice(0, 3).map((region) => (
+                                      <span
+                                        key={`${item.key}-${region}`}
+                                        className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-2 py-0.5 text-[9px] font-medium text-secondary-dark/90 dark:text-secondary-light/80"
+                                      >
+                                        {region}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  {item.suggestedContents?.length ? (
+                                    <div className="space-y-1">
+                                      {item.suggestedContents.slice(0, 2).map((line) => (
+                                        <div key={`${item.key}-${line}`} className="text-[11px] text-secondary-dark/75 dark:text-secondary-light/75">
+                                          • {line}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() => onToggleOpportunitySelection(item.key)}
+                                    className="rounded border border-secondary-dark/20 px-3 py-1 text-xs transition hover:bg-secondary-light/20 dark:border-secondary-light/20"
+                                  >
+                                    {item.selected ? "Remover da seleção" : "Adicionar à seleção"}
+                                  </button>
+                                </div>
+                              );
+                            })()}
+                          </details>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -899,9 +1227,15 @@ function previewLines(value: string, fallback: string, maxItems = 4): string {
 
 function fromLines(value: string): string[] {
   return value
-    .split(/\r?\n|,|;/g)
+    .split(/\r?\n/g)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function fromTextareaLines(value: string): string[] {
+  return value
+    .split(/\r?\n/g)
+    .map((item) => item.trim());
 }
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {

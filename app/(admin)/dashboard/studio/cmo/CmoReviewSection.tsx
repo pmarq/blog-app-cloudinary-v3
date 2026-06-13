@@ -1,3 +1,4 @@
+import { buildPortfolioSnapshotFrame } from "./cmo-domain";
 import { useMemo } from "react";
 
 type BriefItem = {
@@ -75,31 +76,7 @@ export function CmoReviewSection({
 }: CmoReviewSectionProps) {
   const hasBriefs = uniqueBriefItems.length > 0;
   const briefPreview = uniqueBriefItems.slice(0, 6);
-  const territorialSnapshot = useMemo(() => {
-    const territorialIndex = portfolioSnapshot?.territorialIndex || null;
-    const topNeighborhoods = uniqueStrings([
-      ...(territorialIndex?.focusNeighborhoods || []),
-      ...(portfolioSnapshot?.mainNeighborhoods || []),
-    ]);
-    const topCities = uniqueStrings([
-      ...(territorialIndex?.focusCities || []),
-      ...(portfolioSnapshot?.mainCities || []),
-    ]);
-    const coverage =
-      territorialIndex?.coverage?.neighborhoodCount || territorialIndex?.coverage?.cityCount
-        ? `${territorialIndex?.coverage?.neighborhoodCount || 0} bairros • ${territorialIndex?.coverage?.cityCount || 0} cidades`
-        : `${topNeighborhoods.length} bairros • ${topCities.length} cidades`;
-
-    return {
-      summary:
-        territorialIndex?.territorialSummary ||
-        portfolioSnapshot?.strategicSummary ||
-        "Sem índice territorial disponível.",
-      topNeighborhoods: topNeighborhoods.slice(0, 6),
-      topCities: topCities.slice(0, 4),
-      coverage,
-    };
-  }, [portfolioSnapshot]);
+  const territorialSnapshot = useMemo(() => buildPortfolioSnapshotFrame(portfolioSnapshot), [portfolioSnapshot]);
 
   return (
     <>
@@ -140,7 +117,7 @@ export function CmoReviewSection({
             Território
           </div>
           <div className="text-sm text-secondary-dark dark:text-secondary-light">
-            {territorialSnapshot.coverage}
+            {territorialSnapshot.coverageLabel}
           </div>
           <div className="text-xs text-secondary-dark/70 dark:text-secondary-light/70">
             {territorialSnapshot.topNeighborhoods.length

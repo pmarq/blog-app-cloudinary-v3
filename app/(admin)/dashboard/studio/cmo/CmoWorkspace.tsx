@@ -15,6 +15,7 @@ import {
   type MarketOpportunityPayload,
   type PortfolioSnapshot,
   type StrategyPayload,
+  buildPortfolioSnapshotFrame,
   compactEvidence,
   emptyProfile,
   fromLines,
@@ -82,36 +83,6 @@ function isPlaceholderTopic(value: string): boolean {
   return bannedPhrases.some((phrase) => text.includes(phrase));
 }
 
-function buildTerritorialSnapshot(portfolioSnapshot: PortfolioSnapshot | null): {
-  summary: string;
-  topNeighborhoods: string[];
-  topCities: string[];
-  coverage: string;
-} {
-  const territorialIndex = portfolioSnapshot?.territorialIndex || null;
-  const focusNeighborhoods = uniqueStrings([
-    ...(territorialIndex?.focusNeighborhoods || []),
-    ...(portfolioSnapshot?.mainNeighborhoods || []),
-    ...(territorialIndex?.neighborhoods || []).map((entry) => entry?.name || ""),
-  ]);
-  const focusCities = uniqueStrings([
-    ...(territorialIndex?.focusCities || []),
-    ...(portfolioSnapshot?.mainCities || []),
-    ...(territorialIndex?.cities || []).map((entry) => entry?.name || ""),
-  ]);
-  const coverage =
-    territorialIndex?.coverage?.neighborhoodCount || territorialIndex?.coverage?.cityCount
-      ? `${territorialIndex?.coverage?.neighborhoodCount || 0} bairros • ${territorialIndex?.coverage?.cityCount || 0} cidades`
-      : `${focusNeighborhoods.length} bairros • ${focusCities.length} cidades`;
-
-  return {
-    summary: territorialIndex?.territorialSummary || portfolioSnapshot?.strategicSummary || "Sem índice territorial disponível.",
-    topNeighborhoods: focusNeighborhoods.slice(0, 6),
-    topCities: focusCities.slice(0, 4),
-    coverage,
-  };
-}
-
 function isConcreteEditorialPhrase(value: string, anchors: string[]): boolean {
   const text = normalizeLookupText(value);
   if (!text || isPlaceholderTopic(value)) return false;
@@ -170,12 +141,611 @@ function formatSignalLabel(value: string): string {
   return titleCase(trimmed);
 }
 
-function getOpportunityKey(item: {
+type EditorialGapSuggestion = {
+  key: string;
+  label: string;
+  prompt: string;
+};
+
+type EditorialMixBucket = "territorio" | "produto" | "autoridade" | "institucional";
+
+type EditorialMixSummary = {
+  key: EditorialMixBucket;
+  label: string;
+  target: number;
+  actual: number;
+  count: number;
+};
+
+type EditorialPresetKey = "balanced" | "premium" | "market" | "technology" | "authority";
+
+type EditorialPreset = {
+  label: string;
+  description: string;
+  focusDomains: string[];
+  seedThemes: string[];
+  mixTargets: {
+    territorio: number;
+    produto: number;
+    autoridade: number;
+    institucional: number;
+  };
+  preferredTopics: string[];
+};
+
+type ProfileTextareaFormValue = {
+  audience: string;
+  commercialGoals: string;
+  marketSegment: string;
+  regions: string;
+  forbiddenTopics: string;
+  preferredTopics: string;
+  channels: string;
+  editorialFocusDomains: string;
+  editorialSeedThemes: string;
+  editorialMixTargets: string;
+};
+
+function buildProfileTextareaFormValue(profile: CompanyProfile): ProfileTextareaFormValue {
+  return {
+    audience: toLines(profile.audience),
+    commercialGoals: toLines(profile.commercialGoals),
+    marketSegment: toLines(profile.marketSegment),
+    regions: toLines(profile.regions),
+    forbiddenTopics: toLines(profile.forbiddenTopics),
+    preferredTopics: toLines(profile.preferredTopics),
+    channels: toLines(profile.channels),
+    editorialFocusDomains: toLines(profile.editorialConfig?.focusDomains || []),
+    editorialSeedThemes: toLines(profile.editorialConfig?.seedThemes || []),
+    editorialMixTargets: formatEditorialMixTargets(profile.editorialConfig?.mixTargets),
+  };
+}
+
+const EDITORIAL_PRESETS: Record<EditorialPresetKey, EditorialPreset> = {
+  balanced: {
+    label: "Equilibrado",
+    description: "Combina mercado, produto, autoridade e território.",
+    focusDomains: ["mercado", "produto", "autoridade", "território"],
+    seedThemes: ["portfólio", "qualidade construtiva", "mercado premium"],
+    mixTargets: { territorio: 35, produto: 30, autoridade: 25, institucional: 10 },
+    preferredTopics: ["mercado imobiliário", "upgrade residencial", "portfólio"],
+  },
+  premium: {
+    label: "Mercado premium",
+    description: "Foco em alto padrão, percepção de valor e diferenciação.",
+    focusDomains: ["branding", "produto", "arquitetura", "mercado"],
+    seedThemes: ["mercado premium", "arquitetura", "qualidade construtiva"],
+    mixTargets: { territorio: 25, produto: 35, autoridade: 30, institucional: 10 },
+    preferredTopics: ["mercado premium", "alto padrão", "valor percebido"],
+  },
+  market: {
+    label: "Mercado e portfólio",
+    description: "Tese comercial, demanda, mix e leitura de portfólio.",
+    focusDomains: ["mercado", "economia", "branding"],
+    seedThemes: ["portfólio", "tese comercial", "economia"],
+    mixTargets: { territorio: 25, produto: 25, autoridade: 35, institucional: 15 },
+    preferredTopics: ["portfólio", "tese comercial", "demanda"],
+  },
+  technology: {
+    label: "Tecnologia",
+    description: "Blockchain, IA, inovação e transformação digital.",
+    focusDomains: ["tecnologia", "mercado", "branding"],
+    seedThemes: ["blockchain", "tokenização", "inteligência artificial"],
+    mixTargets: { territorio: 20, produto: 20, autoridade: 50, institucional: 10 },
+    preferredTopics: ["blockchain", "tokenização", "proptech"],
+  },
+  authority: {
+    label: "Autoridade",
+    description: "Construtoras, B3, economia e sinais de mercado.",
+    focusDomains: ["construtoras", "economia", "branding"],
+    seedThemes: ["B3", "construtoras", "juros"],
+    mixTargets: { territorio: 20, produto: 20, autoridade: 50, institucional: 10 },
+    preferredTopics: ["construtoras", "B3", "juros"],
+  },
+};
+
+function inferEditorialPresetKey({
+  companyProfile,
+  portfolioSnapshot,
+}: {
+  companyProfile: CompanyProfile;
+  portfolioSnapshot: PortfolioSnapshot | null;
+}): { key: EditorialPresetKey; label: string; reason: string; segmentLabel: string; signals: string[] } {
+  const contextText = normalizeLookupText(
+    [
+      ...(companyProfile.preferredTopics || []),
+      ...(companyProfile.marketSegment || []),
+      ...(companyProfile.commercialGoals || []),
+      ...(companyProfile.editorialConfig?.seedThemes || []),
+      ...(portfolioSnapshot?.commonAttributes || []),
+      ...(portfolioSnapshot?.mainSegments || []),
+      ...(portfolioSnapshot?.strategicSummary ? [portfolioSnapshot.strategicSummary] : []),
+    ].join(" | "),
+  );
+  const signals: string[] = [];
+
+  const pushSignal = (value: string) => {
+    if (!signals.includes(value)) signals.push(value);
+  };
+
+  const has = (value: string) => contextText.includes(normalizeLookupText(value));
+
+  if (has("alto padrão") || has("alto padrao") || has("premium") || has("luxo")) {
+    pushSignal("alto padrão");
+  }
+  if (has("construtora") || has("incorporadora") || has("b3") || has("bolsa")) {
+    pushSignal("construtoras / B3");
+  }
+  if (has("juros") || has("selic") || has("credito") || has("crédito") || has("incc")) {
+    pushSignal("economia / crédito");
+  }
+  if (has("blockchain") || has("token") || has("ia") || has("proptech")) {
+    pushSignal("tecnologia");
+  }
+  if (has("arquitet") || has("design") || has("interiores")) {
+    pushSignal("arquitetura / interiores");
+  }
+  if (has("portfólio") || has("portfolio") || has("tese comercial") || has("mix")) {
+    pushSignal("portfólio / tese");
+  }
+
+  if (
+    contextText.includes("blockchain") ||
+    contextText.includes("token") ||
+    contextText.includes("ia") ||
+    contextText.includes("proptech")
+  ) {
+    return {
+      key: "technology",
+      label: EDITORIAL_PRESETS.technology.label,
+      reason: "Há sinais de tecnologia, inovação ou proptech no contexto.",
+      segmentLabel: "Tecnologia",
+      signals,
+    };
+  }
+
+  if (
+    contextText.includes("b3") ||
+    contextText.includes("construtora") ||
+    contextText.includes("incorporadora") ||
+    contextText.includes("juros") ||
+    contextText.includes("credito") ||
+    contextText.includes("economia")
+  ) {
+    return {
+      key: "authority",
+      label: EDITORIAL_PRESETS.authority.label,
+      reason: "O contexto favorece leitura de mercado, construtoras e economia.",
+      segmentLabel: "Construtoras / mercado",
+      signals,
+    };
+  }
+
+  if (
+    contextText.includes("premium") ||
+    contextText.includes("alto padrão") ||
+    contextText.includes("luxo") ||
+    contextText.includes("arquitet") ||
+    contextText.includes("design") ||
+    contextText.includes("interiores")
+  ) {
+    return {
+      key: "premium",
+      label: EDITORIAL_PRESETS.premium.label,
+      reason: "O portfólio aponta para alto padrão, design ou diferenciação de valor.",
+      segmentLabel: "Alto padrão / premium",
+      signals,
+    };
+  }
+
+  if (contextText.includes("portfólio") || contextText.includes("tese comercial") || contextText.includes("mix")) {
+    return {
+      key: "market",
+      label: EDITORIAL_PRESETS.market.label,
+      reason: "O contexto pede leitura comercial e análise de portfólio.",
+      segmentLabel: "Portfólio / tese comercial",
+      signals,
+    };
+  }
+
+  if (contextText.includes("marca") || contextText.includes("branding") || contextText.includes("autoridade")) {
+    return {
+      key: "authority",
+      label: EDITORIAL_PRESETS.authority.label,
+      reason: "A marca e a autoridade aparecem como alavancas principais.",
+      segmentLabel: "Marca / autoridade",
+      signals,
+    };
+  }
+
+  return {
+    key: "balanced",
+    label: EDITORIAL_PRESETS.balanced.label,
+    reason: "Sem um viés dominante; o mix equilibrado é o melhor ponto de partida.",
+    segmentLabel: "Equilibrado",
+    signals,
+  };
+}
+
+function buildRecommendedEditorialConfig(presetKey: EditorialPresetKey) {
+  const preset = EDITORIAL_PRESETS[presetKey] || EDITORIAL_PRESETS.balanced;
+  return {
+    presetKey,
+    label: preset.label,
+    description: preset.description,
+    focusDomains: preset.focusDomains,
+    seedThemes: preset.seedThemes,
+    mixTargets: preset.mixTargets,
+    preferredTopics: preset.preferredTopics,
+  };
+}
+
+function getOpportunityKey(
+  item: {
   title?: string;
   scope?: string;
   fitScore?: number;
+  editorialType?: string | null;
+    id?: string;
+  },
+): string {
+  return item.id
+    ? item.id
+    : [
+        item.title || "",
+        item.scope || "",
+        item.editorialType || "",
+        String(item.fitScore || ""),
+      ]
+        .join("|")
+        .toLowerCase();
+}
+
+function dedupeOpportunityItems(
+  items: Array<{
+    title?: string;
+    scope?: string;
+    fitScore?: number;
+    editorialType?: string | null;
+    id?: string;
+    editorialPriority?: number | null;
+  }>,
+) {
+  const map = new Map<string, (typeof items)[number]>();
+
+  for (const item of items) {
+    const key = getOpportunityKey(item);
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, item);
+      continue;
+    }
+
+    const existingPriority = Number(existing.editorialPriority || 0) + Number(existing.fitScore || 0);
+    const nextPriority = Number(item.editorialPriority || 0) + Number(item.fitScore || 0);
+    if (nextPriority > existingPriority) {
+      map.set(key, item);
+    }
+  }
+
+  return [...map.entries()].map(([key, item]) => ({ key, item }));
+}
+
+function getEditorialTypeLabel(value: string | null | undefined): string {
+  const normalized = String(value || "").trim().toLowerCase();
+  const labels: Record<string, string> = {
+    mercado: "Mercado",
+    território: "Território",
+    territorio: "Território",
+    economia: "Economia",
+    construtoras: "Construtoras",
+    arquitetura: "Arquitetura",
+    branding: "Branding",
+    tecnologia: "Tecnologia",
+    produto: "Produto",
+  };
+  return labels[normalized] || "Outros";
+}
+
+function parseOpportunityDisplayParts(item: {
+  title?: string;
+  theme?: string | null;
+  editorialType?: string | null;
+  relatedRegions?: string[];
+}): {
+  territory: string;
+  macrotheme: string;
+  builder: string;
+  stage: string;
+} {
+  const title = String(item.title || "").trim();
+  const relatedRegion = item.relatedRegions?.[0] || "";
+  const titleMatch = title.match(/^(.*?):\s*(.*)$/);
+  const regionPart = titleMatch?.[1] || relatedRegion;
+  const detailPart = titleMatch?.[2] || title;
+  const builderMatch = detailPart.match(/\bcom\s+(.+?)(?:\s+em\s+.+)?$/i);
+  const stageMatch = detailPart.match(/\bem\s+(.+)$/i);
+  const stage = stageMatch?.[1]?.trim() || "";
+  const builder = builderMatch?.[1]?.replace(/\s+em\s+.+$/i, "").trim() || "";
+  const macrotheme = detailPart
+    .replace(/\s+com\s+.+$/i, "")
+    .replace(/\s+em\s+.+$/i, "")
+    .trim() || item.theme || item.editorialType || "Oportunidade";
+
+  return {
+    territory: regionPart || relatedRegion || "Geral",
+    macrotheme,
+    builder,
+    stage,
+  };
+}
+
+function formatEditorialMixTargets(mixTargets?: {
+  territorio?: number;
+  produto?: number;
+  autoridade?: number;
+  institucional?: number;
 }): string {
-  return [item.title || "", item.scope || "", String(item.fitScore || "")].join("|").toLowerCase();
+  const targets = mixTargets || {};
+  return [
+    `territorio:${targets.territorio ?? 40}`,
+    `produto:${targets.produto ?? 30}`,
+    `autoridade:${targets.autoridade ?? 20}`,
+    `institucional:${targets.institucional ?? 10}`,
+  ].join("\n");
+}
+
+function parseEditorialMixTargets(value: string): {
+  territorio: number;
+  produto: number;
+  autoridade: number;
+  institucional: number;
+} {
+  const defaults = {
+    territorio: 40,
+    produto: 30,
+    autoridade: 20,
+    institucional: 10,
+  };
+  const result = { ...defaults };
+
+  for (const line of fromLines(value)) {
+    const [rawKey, rawValue] = line.split(/[:=]/).map((item) => item.trim());
+    if (!rawKey || !rawValue) continue;
+    const normalizedKey = normalizeLookupText(rawKey).replace(/\s+/g, "");
+    const parsedValue = Number(rawValue.replace("%", "").trim());
+    if (!Number.isFinite(parsedValue)) continue;
+
+    if (normalizedKey.includes("territorio")) result.territorio = parsedValue;
+    if (normalizedKey.includes("produto")) result.produto = parsedValue;
+    if (normalizedKey.includes("autoridade")) result.autoridade = parsedValue;
+    if (normalizedKey.includes("institucional")) result.institucional = parsedValue;
+  }
+
+  return result;
+}
+
+const EDITORIAL_GAP_HINTS: Record<string, { label: string; prompt: string }> = {
+  economia: {
+    label: "Economia",
+    prompt: "Adicionar pauta sobre juros, crédito, INCC ou financiamento",
+  },
+  construtoras: {
+    label: "Construtoras",
+    prompt: "Adicionar análise sobre desempenho de construtoras na B3",
+  },
+  arquitetura: {
+    label: "Arquitetura",
+    prompt: "Adicionar pauta sobre design de interiores, arquitetura ou acabamento",
+  },
+  produto: {
+    label: "Produto",
+    prompt: "Adicionar pauta sobre qualidade construtiva e diferenciais do produto",
+  },
+  branding: {
+    label: "Branding",
+    prompt: "Adicionar análise de posicionamento e percepção de marca",
+  },
+  tecnologia: {
+    label: "Tecnologia",
+    prompt: "Adicionar pauta sobre blockchain, tokenização ou tecnologia aplicada",
+  },
+  território: {
+    label: "Território",
+    prompt: "Adicionar pauta territorial com bairro como recorte, não como tema único",
+  },
+  mercado: {
+    label: "Mercado",
+    prompt: "Adicionar leitura de mercado mais ampla para o público de alto padrão",
+  },
+};
+
+function buildEditorialGapSuggestions(groups: Array<{ key: string; count: number }>): EditorialGapSuggestion[] {
+  const countByType = new Map(groups.map((group) => [group.key, group.count]));
+  const priorities = ["economia", "construtoras", "arquitetura", "produto", "branding", "tecnologia", "mercado", "território"];
+  const suggestions: EditorialGapSuggestion[] = [];
+
+  for (const type of priorities) {
+    const count = countByType.get(type) || 0;
+    if (count > 0) continue;
+    const hint = EDITORIAL_GAP_HINTS[type];
+    if (!hint) continue;
+    suggestions.push({ key: type, label: hint.label, prompt: hint.prompt });
+  }
+
+  if (!suggestions.length) {
+    suggestions.push({
+      key: "balanced",
+      label: "Cobertura equilibrada",
+      prompt: "Cobertura equilibrada entre mercado, portfólio e território",
+    });
+  }
+
+  return suggestions.slice(0, 4);
+}
+
+function buildThemeGapSuggestions(
+  items: Array<{ title: string; theme?: string | null; editorialType?: string | null; macrotheme?: string | null }>,
+): EditorialGapSuggestion[] {
+  const text = normalizeLookupText(
+    items.map((item) => [item.title, item.theme, item.editorialType, item.macrotheme].filter(Boolean).join(" ")).join(" | "),
+  );
+
+  const themes = [
+    {
+      key: "economia",
+      label: "Economia e crédito",
+      prompt: "Adicionar pauta sobre juros, crédito, INCC e financiamento",
+      keywords: ["juros", "selic", "credito", "crédito", "incc", "financiamento", "economia"],
+    },
+    {
+      key: "construtoras",
+      label: "Construtoras e B3",
+      prompt: "Adicionar análise sobre performance das construtoras na B3",
+      keywords: ["b3", "bolsa", "construtora", "construtoras", "incorporadora", "balanço"],
+    },
+    {
+      key: "arquitetura",
+      label: "Arquitetura e interiores",
+      prompt: "Adicionar pauta sobre design de interiores, arquitetura e acabamento",
+      keywords: ["arquitetura", "interiores", "design", "paisagismo", "acabamento"],
+    },
+    {
+      key: "produto",
+      label: "Qualidade construtiva",
+      prompt: "Adicionar pauta sobre qualidade construtiva e diferenciais do produto",
+      keywords: ["qualidade", "obra", "patologia", "durabilidade", "performance construtiva"],
+    },
+    {
+      key: "branding",
+      label: "Branding e valor",
+      prompt: "Adicionar análise sobre mercado premium e percepção de valor",
+      keywords: ["branding", "marca", "premium", "alto padrão", "luxo", "valor percebido"],
+    },
+    {
+      key: "tecnologia",
+      label: "Tecnologia e inovação",
+      prompt: "Adicionar pauta sobre blockchain, tokenização ou IA no imobiliário",
+      keywords: ["blockchain", "token", "tokeniza", "cripto", "ia", "proptech", "inteligência artificial"],
+    },
+    {
+      key: "portfolio",
+      label: "Portfólio e tese",
+      prompt: "Adicionar leitura sobre o que os dados do portfólio dizem da tese comercial",
+      keywords: ["portfólio", "tese comercial", "mix", "demanda"],
+    },
+    {
+      key: "territorio",
+      label: "Território e urbanismo",
+      prompt: "Adicionar pauta territorial com bairro como recorte, não como tema único",
+      keywords: ["bairro", "território", "urbanismo", "mobilidade", "localização", "entorno", "sustentabilidade"],
+    },
+    {
+      key: "macro_b3",
+      label: "Macrotema: B3 e construtoras",
+      prompt: "Adicionar leitura sobre performance das construtoras na B3 e impacto no mercado premium",
+      keywords: ["b3 e construtoras", "performance das construtoras na b3", "construtoras e b3"],
+    },
+    {
+      key: "macro_blockchain",
+      label: "Macrotema: blockchain",
+      prompt: "Adicionar leitura sobre blockchain no mercado imobiliário e tokenização",
+      keywords: ["blockchain no mercado imobiliario", "tokenização imobiliária", "tecnologia aplicada ao imobiliario"],
+    },
+    {
+      key: "macro_economia",
+      label: "Macrotema: economia e crédito",
+      prompt: "Adicionar leitura sobre juros, crédito e construção civil no mercado premium",
+      keywords: ["economia e crédito", "juros, credito e construcao civil"],
+    },
+    {
+      key: "macro_arquitetura",
+      label: "Macrotema: arquitetura e interiores",
+      prompt: "Adicionar leitura sobre arquitetura, interiores e diferenciais de produto",
+      keywords: ["arquitetura e interiores", "design de interiores", "arquitetura"],
+    },
+  ];
+
+  return themes
+    .filter((theme) => !theme.keywords.some((keyword) => text.includes(keyword)))
+    .map((theme) => ({
+      key: theme.key,
+      label: theme.label,
+      prompt: theme.prompt,
+    }))
+    .slice(0, 4);
+}
+
+function getEditorialMixBucket(item: {
+  editorialType?: string | null;
+  theme?: string | null;
+  title?: string;
+}): EditorialMixBucket {
+  const text = normalizeLookupText([item.editorialType, item.theme, item.title].filter(Boolean).join(" "));
+  if (
+    text.includes("bairro") ||
+    text.includes("territ") ||
+    text.includes("urbanism") ||
+    text.includes("mobilidade") ||
+    text.includes("localiza") ||
+    text.includes("entorno")
+  ) {
+    return "territorio";
+  }
+  if (text.includes("arquitet") || text.includes("qualidade") || text.includes("obra") || text.includes("produto")) {
+    return "produto";
+  }
+  if (
+    text.includes("construtor") ||
+    text.includes("incorpor") ||
+    text.includes("b3") ||
+    text.includes("marca") ||
+    text.includes("premium") ||
+    text.includes("blockchain") ||
+    text.includes("tecnologia")
+  ) {
+    return "autoridade";
+  }
+  return "institucional";
+}
+
+function buildEditorialMixSummary(
+  items: Array<{ editorialType?: string | null; theme?: string | null; title: string }>,
+  targets: Record<EditorialMixBucket, number>,
+): EditorialMixSummary[] {
+  const normalizedTargets: Record<EditorialMixBucket, number> = {
+    territorio: targets.territorio || 40,
+    produto: targets.produto || 30,
+    autoridade: targets.autoridade || 20,
+    institucional: targets.institucional || 10,
+  };
+
+  const buckets: Record<EditorialMixBucket, number> = {
+    territorio: 0,
+    produto: 0,
+    autoridade: 0,
+    institucional: 0,
+  };
+
+  for (const item of items) {
+    buckets[getEditorialMixBucket(item)] += 1;
+  }
+
+  const total = Math.max(items.length, 1);
+  const labels: Record<EditorialMixBucket, string> = {
+    territorio: "Território / bairro",
+    produto: "Produto / empreendimento",
+    autoridade: "Autoridade",
+    institucional: "Institucional / educativo",
+  };
+
+  return (Object.keys(normalizedTargets) as EditorialMixBucket[]).map((key) => ({
+    key,
+    label: labels[key],
+    target: normalizedTargets[key],
+    actual: Math.round((buckets[key] / total) * 100),
+    count: buckets[key],
+  }));
 }
 
 function buildEditorialSuggestions({
@@ -711,6 +1281,9 @@ export function CmoWorkspace({
   const [briefItems, setBriefItems] = useState<BriefItem[]>([]);
 
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(emptyProfile);
+  const [profileTextareaFormValue, setProfileTextareaFormValue] = useState<ProfileTextareaFormValue>(
+    () => buildProfileTextareaFormValue(emptyProfile),
+  );
   const [portfolioSnapshot, setPortfolioSnapshot] = useState<PortfolioSnapshot | null>(null);
   const [opportunitySearch, setOpportunitySearch] = useState<MarketOpportunityPayload | null>(null);
   const [lastOpportunitySearchRequest, setLastOpportunitySearchRequest] = useState<{
@@ -738,8 +1311,23 @@ export function CmoWorkspace({
       preferredTopics: toLines(companyProfile.preferredTopics),
       commercialGoals: toLines(companyProfile.commercialGoals),
       channels: toLines(companyProfile.channels),
+      editorialFocusDomains: toLines(companyProfile.editorialConfig?.focusDomains || []),
+      editorialSeedThemes: toLines(companyProfile.editorialConfig?.seedThemes || []),
+      editorialMixTargets: formatEditorialMixTargets(companyProfile.editorialConfig?.mixTargets),
     }),
     [companyProfile],
+  );
+  const recommendedEditorialPreset = useMemo(
+    () => inferEditorialPresetKey({ companyProfile, portfolioSnapshot }),
+    [companyProfile, portfolioSnapshot],
+  );
+  const recommendedEditorialConfig = useMemo(
+    () => buildRecommendedEditorialConfig(recommendedEditorialPreset.key),
+    [recommendedEditorialPreset.key],
+  );
+  const recommendedEditorialSignals = useMemo(
+    () => recommendedEditorialPreset.signals,
+    [recommendedEditorialPreset.signals],
   );
 
   const cmoStage = useMemo(
@@ -787,10 +1375,7 @@ export function CmoWorkspace({
     () => groupSuggestionsByCategory(aiTopicSuggestions),
     [aiTopicSuggestions],
   );
-  const territorialSnapshot = useMemo(
-    () => buildTerritorialSnapshot(portfolioSnapshot),
-    [portfolioSnapshot],
-  );
+  const territorialSnapshot = useMemo(() => buildPortfolioSnapshotFrame(portfolioSnapshot), [portfolioSnapshot]);
   const aiTopicSuggestionSummary = useMemo(() => {
     const regionCount = uniqueStrings([
       ...(companyProfile.regions || []),
@@ -840,21 +1425,129 @@ export function CmoWorkspace({
     [calendarItems.length, marketOpportunityDrafts, opportunitySearch, portfolioSnapshot, portfolioSnapshots, uniqueBriefItems.length],
   );
   const opportunitySummary = useMemo(
-    () => ({
-      count: Array.isArray(opportunitySearch?.opportunities) ? opportunitySearch.opportunities.length : 0,
-      selectedCount: (opportunitySearch?.opportunities || []).filter((item) =>
-        selectedOpportunityKeys.includes(getOpportunityKey(item)),
-      ).length,
-      items: (opportunitySearch?.opportunities || []).map((item) => ({
+    () => {
+      const normalizedItems = (opportunitySearch?.opportunities || []).map((item) => {
+        const key = getOpportunityKey(item);
+        const editorialType = item.editorialType || "mercado";
+        const displayParts = parseOpportunityDisplayParts(item);
+        return {
           title: item.title || "Oportunidade",
+          theme: item.theme || null,
+          editorialType,
+          editorialPriority: item.editorialPriority || 0,
           scope: item.scope || "mercado",
           fitScore: item.fitScore || 0,
           relatedRegions: item.relatedRegions || [],
-          key: getOpportunityKey(item),
-          selected: selectedOpportunityKeys.includes(getOpportunityKey(item)),
+          key,
+          selected: selectedOpportunityKeys.includes(key),
           suggestedContents: item.suggestedContents || [],
-        })),
-    }),
+          territory: displayParts.territory,
+          macrotheme: displayParts.macrotheme,
+          builder: displayParts.builder,
+          stage: displayParts.stage,
+        };
+      });
+
+      const dedupedItems = dedupeOpportunityItems(normalizedItems).map(({ key, item }) => ({
+        ...item,
+        title: item.title || "Oportunidade",
+        scope: item.scope || "mercado",
+        key,
+        selected: selectedOpportunityKeys.includes(key),
+      })) as Array<{
+        key: string;
+        selected: boolean;
+        title: string;
+        theme?: string | null;
+        editorialType?: string | null;
+        editorialPriority?: number | null;
+        scope: string;
+        fitScore: number;
+        relatedRegions?: string[];
+        suggestedContents?: string[];
+        territory?: string;
+        macrotheme?: string;
+        builder?: string;
+        stage?: string;
+      }>;
+
+      const groupedMap = new Map<string, typeof dedupedItems>();
+      for (const item of dedupedItems) {
+        const groupKey = String(item.editorialType || "mercado").toLowerCase();
+        const groupItems = groupedMap.get(groupKey) || [];
+        groupItems.push(item);
+        groupedMap.set(groupKey, groupItems);
+      }
+
+      const groupOrder = ["mercado", "economia", "construtoras", "arquitetura", "produto", "branding", "tecnologia", "território", "outros"];
+      const groups = groupOrder
+        .map((groupKey) => {
+          const groupItems = groupedMap.get(groupKey) || [];
+          if (!groupItems.length) return null;
+          const sortedItems = [...groupItems].sort(
+            (left, right) =>
+              (right.editorialPriority || 0) - (left.editorialPriority || 0) ||
+              (right.fitScore || 0) - (left.fitScore || 0),
+          );
+          return {
+            key: groupKey,
+            label: getEditorialTypeLabel(groupKey),
+            count: sortedItems.length,
+            selectedCount: sortedItems.filter((item) => item.selected).length,
+            items: sortedItems,
+            averagePriority: Math.round(
+              sortedItems.reduce((sum, item) => sum + (item.editorialPriority || 0), 0) /
+                Math.max(sortedItems.length, 1),
+            ),
+          };
+        })
+        .filter(Boolean) as Array<{
+        key: string;
+        label: string;
+        count: number;
+        selectedCount: number;
+        averagePriority: number;
+        items: typeof dedupedItems;
+      }>;
+      const editorialGapSuggestions = [
+        ...buildEditorialGapSuggestions(groups.map((group) => ({ key: group.key, count: group.count }))),
+        ...buildThemeGapSuggestions(dedupedItems),
+      ]
+        .filter((suggestion, index, list) =>
+          list.findIndex((candidate) => candidate.key === suggestion.key) === index,
+        )
+        .slice(0, 4);
+      const macrothemeSummary = [...dedupedItems].reduce((accumulator, item) => {
+        const key = String(item.macrotheme || item.theme || item.title || "Outros").trim();
+        if (!key) return accumulator;
+        accumulator.set(key, (accumulator.get(key) || 0) + 1);
+        return accumulator;
+      }, new Map<string, number>());
+      const editorialMixSummary = buildEditorialMixSummary(dedupedItems, {
+        territorio: companyProfile.editorialConfig?.mixTargets?.territorio || 40,
+        produto: companyProfile.editorialConfig?.mixTargets?.produto || 30,
+        autoridade: companyProfile.editorialConfig?.mixTargets?.autoridade || 20,
+        institucional: companyProfile.editorialConfig?.mixTargets?.institucional || 10,
+      });
+
+      return {
+        count: dedupedItems.length,
+        selectedCount: dedupedItems.filter((item) => item.selected).length,
+        items: dedupedItems,
+        macrothemes: [...macrothemeSummary.entries()]
+          .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+          .slice(0, 6)
+          .map(([label, count]) => ({ label, count })),
+        editorialGapSuggestions,
+        editorialMixSummary,
+        groups: [...groups].sort(
+          (left, right) =>
+            right.averagePriority - left.averagePriority ||
+            right.count - left.count ||
+            left.label.localeCompare(right.label),
+        ),
+      };
+    },
     [opportunitySearch, selectedOpportunityKeys],
   );
 
@@ -1027,7 +1720,22 @@ export function CmoWorkspace({
             ? nextCompanyProfile.commercialGoals
             : [],
           channels: Array.isArray(nextCompanyProfile?.channels) ? nextCompanyProfile.channels : [],
+          editorialConfig: {
+            focusDomains: Array.isArray(nextCompanyProfile?.editorialConfig?.focusDomains)
+              ? nextCompanyProfile.editorialConfig.focusDomains
+              : [],
+            seedThemes: Array.isArray(nextCompanyProfile?.editorialConfig?.seedThemes)
+              ? nextCompanyProfile.editorialConfig.seedThemes
+              : [],
+            mixTargets: {
+              territorio: Number(nextCompanyProfile?.editorialConfig?.mixTargets?.territorio) || 40,
+              produto: Number(nextCompanyProfile?.editorialConfig?.mixTargets?.produto) || 30,
+              autoridade: Number(nextCompanyProfile?.editorialConfig?.mixTargets?.autoridade) || 20,
+              institucional: Number(nextCompanyProfile?.editorialConfig?.mixTargets?.institucional) || 10,
+            },
+          },
         });
+        setProfileTextareaFormValue(buildProfileTextareaFormValue(nextCompanyProfile || emptyProfile));
       } catch (error) {
         const message = error instanceof Error ? error.message : "Erro ao carregar perfil.";
         toast({ title: "Erro", description: message, variant: "destructive" });
@@ -1049,19 +1757,25 @@ export function CmoWorkspace({
     try {
       const nextCompanyProfile = await cmoClient.saveCompanyProfile({
         ...companyProfile,
-        audience: fromLines(profileFormValue.audience),
-        marketSegment: fromLines(profileFormValue.marketSegment),
-        regions: fromLines(profileFormValue.regions),
+        audience: fromLines(profileTextareaFormValue.audience),
+        marketSegment: fromLines(profileTextareaFormValue.marketSegment),
+        regions: fromLines(profileTextareaFormValue.regions),
         contentStyle: fromLines(profileFormValue.contentStyle),
-        forbiddenTopics: fromLines(profileFormValue.forbiddenTopics),
-        preferredTopics: fromLines(profileFormValue.preferredTopics),
-        commercialGoals: fromLines(profileFormValue.commercialGoals),
-        channels: fromLines(profileFormValue.channels),
+        forbiddenTopics: fromLines(profileTextareaFormValue.forbiddenTopics),
+        preferredTopics: fromLines(profileTextareaFormValue.preferredTopics),
+        commercialGoals: fromLines(profileTextareaFormValue.commercialGoals),
+        channels: fromLines(profileTextareaFormValue.channels),
+        editorialConfig: {
+          focusDomains: fromLines(profileTextareaFormValue.editorialFocusDomains),
+          seedThemes: fromLines(profileTextareaFormValue.editorialSeedThemes),
+          mixTargets: parseEditorialMixTargets(profileTextareaFormValue.editorialMixTargets),
+        },
       });
       setCompanyProfile({
         ...emptyProfile,
         ...nextCompanyProfile,
       });
+      setProfileTextareaFormValue(buildProfileTextareaFormValue(nextCompanyProfile || emptyProfile));
       await refreshDrafts();
       toast({ title: "Perfil salvo", description: "Company Profile atualizado." });
     } catch (error) {
@@ -1087,7 +1801,7 @@ export function CmoWorkspace({
     }
   };
 
-  const searchOpportunities = async () => {
+  const runOpportunitySearch = async (focusEditorialTypes: string[] = []) => {
     setSearchingOpportunities(true);
     const previousOpportunitySearch = opportunitySearch || marketOpportunityDrafts[0] || null;
     setLastOpportunitySearchRequest({
@@ -1104,6 +1818,7 @@ export function CmoWorkspace({
         companyProfile,
         portfolioSnapshot,
         previousOpportunitySearch,
+        focusEditorialTypes,
       });
       setOpportunitySearch(nextOpportunitySearch);
       setSelectedOpportunityKeys([]);
@@ -1115,6 +1830,38 @@ export function CmoWorkspace({
     } finally {
       setSearchingOpportunities(false);
     }
+  };
+
+  const applyEditorialPreset = (presetKey: string) => {
+    const preset = EDITORIAL_PRESETS[presetKey as EditorialPresetKey];
+    if (!preset) return;
+
+    setCompanyProfile((previous) => ({
+      ...previous,
+      preferredTopics: uniqueStrings([...preset.preferredTopics, ...(previous.preferredTopics || [])]),
+      editorialConfig: {
+        ...(previous.editorialConfig || {}),
+        focusDomains: preset.focusDomains,
+        seedThemes: preset.seedThemes,
+        mixTargets: preset.mixTargets,
+      },
+    }));
+    setProfileTextareaFormValue((previous) => ({
+      ...previous,
+      editorialFocusDomains: toLines(preset.focusDomains),
+      editorialSeedThemes: toLines(preset.seedThemes),
+      editorialMixTargets: formatEditorialMixTargets(preset.mixTargets),
+    }));
+  };
+
+  const searchOpportunities = async () => {
+    await runOpportunitySearch();
+  };
+
+  const searchOpportunitiesForEditorialGap = async (key: string) => {
+    const normalizedKey = normalizeLookupText(key);
+    const focusEditorialTypes = normalizedKey && normalizedKey !== "balanced" ? [normalizedKey] : [];
+    await runOpportunitySearch(focusEditorialTypes);
   };
 
   const generateStrategy = async () => {
@@ -1327,6 +2074,13 @@ export function CmoWorkspace({
             selectedOpportunityKeys={selectedOpportunityKeys}
             onToggleOpportunitySelection={toggleOpportunitySelection}
             onClearOpportunitySelection={clearOpportunitySelection}
+            onExploreEditorialGap={searchOpportunitiesForEditorialGap}
+            onApplyEditorialPreset={applyEditorialPreset}
+            recommendedEditorialPreset={recommendedEditorialPreset}
+            recommendedEditorialConfig={recommendedEditorialConfig}
+            recommendedEditorialSignals={recommendedEditorialSignals}
+            profileTextareaFormValue={profileTextareaFormValue}
+            onProfileTextareaChange={setProfileTextareaFormValue}
             onProfileChange={(updater) => {
               setCompanyProfile((prev) => ({ ...prev, ...updater(prev as any) }));
             }}

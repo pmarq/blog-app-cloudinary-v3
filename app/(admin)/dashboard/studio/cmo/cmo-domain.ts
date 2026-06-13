@@ -13,6 +13,16 @@ export type CompanyProfile = {
   preferredTopics: string[];
   commercialGoals: string[];
   channels: string[];
+  editorialConfig?: {
+    focusDomains?: string[];
+    seedThemes?: string[];
+    mixTargets?: {
+      territorio?: number;
+      produto?: number;
+      autoridade?: number;
+      institucional?: number;
+    };
+  };
 };
 
 export type PortfolioSnapshot = {
@@ -27,6 +37,25 @@ export type PortfolioSnapshot = {
   excludedSegments?: string[];
   strategicSummary?: string;
   relatedProductIds?: string[];
+  realizationIndex?: {
+    coverage?: {
+      builderCount?: number;
+      developerCount?: number;
+      architectureFirmCount?: number;
+      landscapeFirmCount?: number;
+      interiorsFirmCount?: number;
+      lightingFirmCount?: number;
+      salesBrokerCount?: number;
+    };
+    builders?: Array<{ name: string; count: number; projectIds?: string[]; lastUpdatedAt?: number | null }>;
+    developers?: Array<{ name: string; count: number; projectIds?: string[]; lastUpdatedAt?: number | null }>;
+    architectureFirms?: Array<{ name: string; count: number; projectIds?: string[]; lastUpdatedAt?: number | null }>;
+    landscapeFirms?: Array<{ name: string; count: number; projectIds?: string[]; lastUpdatedAt?: number | null }>;
+    interiorsFirms?: Array<{ name: string; count: number; projectIds?: string[]; lastUpdatedAt?: number | null }>;
+    lightingFirms?: Array<{ name: string; count: number; projectIds?: string[]; lastUpdatedAt?: number | null }>;
+    salesBrokers?: Array<{ name: string; count: number; projectIds?: string[]; lastUpdatedAt?: number | null }>;
+    constructionStages?: Array<{ name: string; count: number; projectIds?: string[]; lastUpdatedAt?: number | null }>;
+  };
   territorialIndex?: {
     coverage?: {
       projectCount?: number;
@@ -58,6 +87,15 @@ export type PortfolioSnapshot = {
   };
 };
 
+export type PortfolioSnapshotFrame = {
+  summary: string;
+  coverageLabel: string;
+  topNeighborhoods: string[];
+  topCities: string[];
+  topBuilders: string[];
+  topStages: string[];
+};
+
 export type MarketOpportunityPayload = {
   id?: string;
   orgId?: string;
@@ -65,6 +103,9 @@ export type MarketOpportunityPayload = {
   queries?: string[];
   opportunities?: Array<{
     title: string;
+    theme?: string | null;
+    editorialType?: string | null;
+    editorialPriority?: number | null;
     scope: string;
     fitScore: number;
     relatedRegions?: string[];
@@ -193,6 +234,16 @@ export const emptyProfile: CompanyProfile = {
   preferredTopics: [],
   commercialGoals: [],
   channels: [],
+  editorialConfig: {
+    focusDomains: [],
+    seedThemes: [],
+    mixTargets: {
+      territorio: 40,
+      produto: 30,
+      autoridade: 20,
+      institucional: 10,
+    },
+  },
 };
 
 export function toLines(value: string[]): string {
@@ -201,7 +252,7 @@ export function toLines(value: string[]): string {
 
 export function fromLines(value: string): string[] {
   return value
-    .split(/\r?\n|,|;/g)
+    .split(/\r?\n/g)
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -233,5 +284,45 @@ export function normalizeLookupText(value: string): string {
 
 export function compactEvidence(values: string[]): string[] {
   return uniqueStrings(values).slice(0, 4);
+}
+
+export function buildPortfolioSnapshotFrame(portfolioSnapshot: PortfolioSnapshot | null): PortfolioSnapshotFrame {
+  const territorialIndex = portfolioSnapshot?.territorialIndex || null;
+  const realizationIndex = portfolioSnapshot?.realizationIndex || null;
+  const topNeighborhoods = uniqueStrings([
+    ...(territorialIndex?.focusNeighborhoods || []),
+    ...(portfolioSnapshot?.mainNeighborhoods || []),
+    ...(territorialIndex?.neighborhoods || []).map((entry) => entry?.name || ""),
+  ]);
+  const topCities = uniqueStrings([
+    ...(territorialIndex?.focusCities || []),
+    ...(portfolioSnapshot?.mainCities || []),
+    ...(territorialIndex?.cities || []).map((entry) => entry?.name || ""),
+  ]);
+  const topBuilders = uniqueStrings([
+    ...(realizationIndex?.builders || []).map((entry) => entry?.name || ""),
+    ...(realizationIndex?.developers || []).map((entry) => entry?.name || ""),
+  ]);
+  const topStages = uniqueStrings((realizationIndex?.constructionStages || []).map((entry) => entry?.name || ""));
+  const coverageNeighborhoodCount = Math.max(
+    Number(territorialIndex?.coverage?.neighborhoodCount || 0),
+    topNeighborhoods.length,
+  );
+  const coverageCityCount = Math.max(
+    Number(territorialIndex?.coverage?.cityCount || 0),
+    topCities.length,
+  );
+
+  return {
+    summary:
+      territorialIndex?.territorialSummary ||
+      portfolioSnapshot?.strategicSummary ||
+      "Sem índice territorial disponível.",
+    coverageLabel: `${coverageNeighborhoodCount} bairros • ${coverageCityCount} cidades`,
+    topNeighborhoods: topNeighborhoods.slice(0, 6),
+    topCities: topCities.slice(0, 4),
+    topBuilders: topBuilders.slice(0, 6),
+    topStages: topStages.slice(0, 4),
+  };
 }
 

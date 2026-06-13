@@ -76,9 +76,8 @@ function toText(values: string[] | undefined): string {
 
 function fromText(value: string): string[] {
   return String(value || "")
-    .split(/\r?\n|,|;/g)
-    .map((item) => item.trim())
-    .filter(Boolean);
+    .split(/\r?\n/g)
+    .map((item) => item.trim());
 }
 
 function toInputDate(value: string | null | undefined): string {

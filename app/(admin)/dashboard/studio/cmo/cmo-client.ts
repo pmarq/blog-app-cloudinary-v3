@@ -121,11 +121,16 @@ export function createCmoClient(orgId: string) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId }),
       });
-      const payload = await parseJson<{ ok: boolean; message?: string; latestPortfolioSnapshot?: PortfolioSnapshot }>(response);
+      const payload = await parseJson<{
+        ok: boolean;
+        message?: string;
+        latestPortfolioSnapshot?: PortfolioSnapshot;
+        portfolioSnapshot?: PortfolioSnapshot;
+      }>(response);
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.message || "Falha ao analisar portfólio.");
       }
-      return payload.latestPortfolioSnapshot || null;
+      return payload.latestPortfolioSnapshot || payload.portfolioSnapshot || null;
     },
 
     async searchOpportunities(input: {
@@ -133,6 +138,7 @@ export function createCmoClient(orgId: string) {
       companyProfile: CompanyProfile;
       portfolioSnapshot: PortfolioSnapshot | null;
       previousOpportunitySearch: MarketOpportunityPayload | null;
+      focusEditorialTypes?: string[];
     }) {
       const response = await apiFetch("/api/studio/cmo/opportunities/search", {
         method: "POST",
@@ -140,6 +146,7 @@ export function createCmoClient(orgId: string) {
         body: JSON.stringify({
           orgId,
           portfolioSnapshotId: input.portfolioSnapshotId || undefined,
+          focusEditorialTypes: Array.isArray(input.focusEditorialTypes) ? input.focusEditorialTypes : undefined,
           context: {
             companyProfile: input.companyProfile,
             portfolioSnapshot: input.portfolioSnapshot,
@@ -148,11 +155,16 @@ export function createCmoClient(orgId: string) {
           } satisfies OpportunitySearchContext,
         }),
       });
-      const payload = await parseJson<{ ok: boolean; message?: string; latestOpportunitySearch?: MarketOpportunityPayload }>(response);
+      const payload = await parseJson<{
+        ok: boolean;
+        message?: string;
+        latestOpportunitySearch?: MarketOpportunityPayload;
+        opportunitySearch?: MarketOpportunityPayload;
+      }>(response);
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.message || "Falha ao buscar oportunidades.");
       }
-      return payload.latestOpportunitySearch || null;
+      return payload.latestOpportunitySearch || payload.opportunitySearch || null;
     },
 
     async generateStrategy(input: { period: string; objective: string; portfolioSnapshotId?: string; opportunitySearchId?: string }) {
