@@ -94,6 +94,10 @@ export type PortfolioSnapshotFrame = {
   topCities: string[];
   topBuilders: string[];
   topStages: string[];
+  neighborhoods: Array<{ name: string; count: number }>;
+  cities: Array<{ name: string; count: number }>;
+  builders: Array<{ name: string; count: number }>;
+  stages: Array<{ name: string; count: number }>;
 };
 
 export type MarketOpportunityPayload = {
@@ -273,6 +277,12 @@ export function uniqueStrings(values: Array<string | null | undefined>): string[
   return output;
 }
 
+function isSuspiciousTerritoryLabel(value: string): boolean {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return true;
+  return normalized.includes("portal") || normalized.includes("cadastro") || normalized.length < 2;
+}
+
 export function normalizeLookupText(value: string): string {
   return String(value || "")
     .normalize("NFD")
@@ -289,19 +299,31 @@ export function compactEvidence(values: string[]): string[] {
 export function buildPortfolioSnapshotFrame(portfolioSnapshot: PortfolioSnapshot | null): PortfolioSnapshotFrame {
   const territorialIndex = portfolioSnapshot?.territorialIndex || null;
   const realizationIndex = portfolioSnapshot?.realizationIndex || null;
+  const neighborhoodEntries = Array.isArray(territorialIndex?.neighborhoods)
+    ? territorialIndex.neighborhoods.filter((entry) => entry?.name && !isSuspiciousTerritoryLabel(entry.name))
+    : [];
+  const cityEntries = Array.isArray(territorialIndex?.cities)
+    ? territorialIndex.cities.filter((entry) => entry?.name && !isSuspiciousTerritoryLabel(entry.name))
+    : [];
+  const builderEntries = [
+    ...(Array.isArray(realizationIndex?.builders) ? realizationIndex.builders : []),
+    ...(Array.isArray(realizationIndex?.developers) ? realizationIndex.developers : []),
+  ].filter((entry) => entry?.name && !isSuspiciousTerritoryLabel(entry.name));
+  const stageEntries = Array.isArray(realizationIndex?.constructionStages)
+    ? realizationIndex.constructionStages.filter((entry) => entry?.name && !isSuspiciousTerritoryLabel(entry.name))
+    : [];
   const topNeighborhoods = uniqueStrings([
     ...(territorialIndex?.focusNeighborhoods || []),
-    ...(portfolioSnapshot?.mainNeighborhoods || []),
-    ...(territorialIndex?.neighborhoods || []).map((entry) => entry?.name || ""),
+    ...(portfolioSnapshot?.mainNeighborhoods || []).filter((value) => !isSuspiciousTerritoryLabel(value)),
+    ...neighborhoodEntries.map((entry) => entry?.name || ""),
   ]);
   const topCities = uniqueStrings([
     ...(territorialIndex?.focusCities || []),
-    ...(portfolioSnapshot?.mainCities || []),
-    ...(territorialIndex?.cities || []).map((entry) => entry?.name || ""),
+    ...(portfolioSnapshot?.mainCities || []).filter((value) => !isSuspiciousTerritoryLabel(value)),
+    ...cityEntries.map((entry) => entry?.name || ""),
   ]);
   const topBuilders = uniqueStrings([
-    ...(realizationIndex?.builders || []).map((entry) => entry?.name || ""),
-    ...(realizationIndex?.developers || []).map((entry) => entry?.name || ""),
+    ...builderEntries.map((entry) => entry?.name || ""),
   ]);
   const topStages = uniqueStrings((realizationIndex?.constructionStages || []).map((entry) => entry?.name || ""));
   const coverageNeighborhoodCount = Math.max(
@@ -323,6 +345,18 @@ export function buildPortfolioSnapshotFrame(portfolioSnapshot: PortfolioSnapshot
     topCities: topCities.slice(0, 4),
     topBuilders: topBuilders.slice(0, 6),
     topStages: topStages.slice(0, 4),
+    neighborhoods: neighborhoodEntries
+      .map((entry) => ({ name: entry.name, count: entry.count || 0 }))
+      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name)),
+    cities: cityEntries
+      .map((entry) => ({ name: entry.name, count: entry.count || 0 }))
+      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name)),
+    builders: builderEntries
+      .map((entry) => ({ name: entry.name, count: entry.count || 0 }))
+      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name)),
+    stages: stageEntries
+      .map((entry) => ({ name: entry.name, count: entry.count || 0 }))
+      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name)),
   };
 }
 

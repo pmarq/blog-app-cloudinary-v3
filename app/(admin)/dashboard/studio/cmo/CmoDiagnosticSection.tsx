@@ -313,6 +313,14 @@ export function CmoDiagnosticSection({
     [calendarItems, strategyObjective],
   );
   const territorialSnapshot = useMemo(() => buildPortfolioSnapshotFrame(portfolioSnapshot), [portfolioSnapshot]);
+  const suspiciousTerritoryLabels = useMemo(() => {
+    const labels = [
+      ...territorialSnapshot.cities.map((entry) => entry.name),
+      ...territorialSnapshot.neighborhoods.map((entry) => entry.name),
+      ...territorialSnapshot.builders.map((entry) => entry.name),
+    ];
+    return labels.filter((label) => /portal|cadastro/i.test(label));
+  }, [territorialSnapshot]);
 
   const setTextareaDraft = (field: keyof typeof profileTextareaFormValue, value: string) => {
     onProfileTextareaChange((previous) => ({
@@ -644,6 +652,14 @@ export function CmoDiagnosticSection({
               </div>
             </div>
             <div>
+              <div className="font-semibold text-secondary-dark dark:text-secondary-light">Cidades</div>
+              <div className="mt-1">
+                {territorialSnapshot.topCities.length
+                  ? territorialSnapshot.topCities.slice(0, 4).join(" • ")
+                  : "Sem cidades priorizadas"}
+              </div>
+            </div>
+            <div>
               <div className="font-semibold text-secondary-dark dark:text-secondary-light">Construtoras</div>
               <div className="mt-1">
                 {territorialSnapshot.topBuilders.length
@@ -666,6 +682,98 @@ export function CmoDiagnosticSection({
               </div>
             </div>
           </div>
+
+          <div className="grid gap-2 md:grid-cols-2">
+            <details className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/20 dark:bg-black/10 p-3">
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                Bairros detalhados
+              </summary>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-secondary-dark/75 dark:text-secondary-light/75">
+                {territorialSnapshot.neighborhoods.length ? (
+                  territorialSnapshot.neighborhoods.map((neighborhood) => (
+                    <span
+                      key={neighborhood.name}
+                      className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-3 py-1"
+                    >
+                      {neighborhood.name}
+                      <span className="ml-1 opacity-70">({neighborhood.count})</span>
+                    </span>
+                  ))
+                ) : (
+                  <span>Sem bairros priorizados</span>
+                )}
+              </div>
+            </details>
+
+            <details className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/20 dark:bg-black/10 p-3">
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                Cidades detalhadas
+              </summary>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-secondary-dark/75 dark:text-secondary-light/75">
+                {territorialSnapshot.cities.length ? (
+                  territorialSnapshot.cities.map((city) => (
+                    <span
+                      key={city.name}
+                      className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-3 py-1"
+                    >
+                      {city.name}
+                      <span className="ml-1 opacity-70">({city.count})</span>
+                    </span>
+                  ))
+                ) : (
+                  <span>Sem cidades priorizadas</span>
+                )}
+              </div>
+            </details>
+
+            <details className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/20 dark:bg-black/10 p-3">
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                Construtoras detalhadas
+              </summary>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-secondary-dark/75 dark:text-secondary-light/75">
+                {territorialSnapshot.builders.length ? (
+                  territorialSnapshot.builders.map((builder) => (
+                    <span
+                      key={builder.name}
+                      className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-3 py-1"
+                    >
+                      {builder.name}
+                      <span className="ml-1 opacity-70">({builder.count})</span>
+                    </span>
+                  ))
+                ) : (
+                  <span>Sem construtoras priorizadas</span>
+                )}
+              </div>
+            </details>
+
+            <details className="rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/20 dark:bg-black/10 p-3">
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-highlight-light">
+                Estágios detalhados
+              </summary>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-secondary-dark/75 dark:text-secondary-light/75">
+                {territorialSnapshot.stages.length ? (
+                  territorialSnapshot.stages.map((stage) => (
+                    <span
+                      key={stage.name}
+                      className="rounded-full border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/40 dark:bg-black/10 px-3 py-1"
+                    >
+                      {stage.name}
+                      <span className="ml-1 opacity-70">({stage.count})</span>
+                    </span>
+                  ))
+                ) : (
+                  <span>Sem estágio construtivo priorizado</span>
+                )}
+              </div>
+            </details>
+          </div>
+
+          {suspiciousTerritoryLabels.length ? (
+            <div className="rounded border border-amber-400/40 bg-amber-50/70 p-3 text-xs text-amber-900 dark:border-amber-300/30 dark:bg-amber-400/10 dark:text-amber-100">
+              Há itens suspeitos no índice territorial: {suspiciousTerritoryLabels.slice(0, 3).join(" • ")}
+            </div>
+          ) : null}
 
           <div className="grid gap-2 rounded border border-secondary-dark/15 dark:border-secondary-light/15 bg-white/20 dark:bg-black/10 p-3 text-xs text-secondary-dark/75 dark:text-secondary-light/75 md:grid-cols-4">
             <TraceCard label="Oportunidade" value={cmoRunTrace.opportunitySearchId || "sem id"} />
