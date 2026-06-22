@@ -227,7 +227,10 @@ function scoreProjectMatch(
   return bestScore;
 }
 
-async function fetchProjectSourceCandidates(orgId: string): Promise<KbSourceListItem[]> {
+async function fetchProjectSourceCandidates(
+  orgId: string,
+  authToken: string,
+): Promise<KbSourceListItem[]> {
   const query = new URLSearchParams({
     orgId,
     sourceProject: "inlevor-app",
@@ -238,7 +241,7 @@ async function fetchProjectSourceCandidates(orgId: string): Promise<KbSourceList
 
   const response = await fetch(`${getKbCoreUrl("/kb/sources")}?${query.toString()}`, {
     method: "GET",
-    headers: buildKbCoreHeaders({ Accept: "application/json" }, token),
+    headers: buildKbCoreHeaders({ Accept: "application/json" }, authToken),
     cache: "no-store",
   });
 
@@ -251,6 +254,7 @@ async function fetchProjectSourceCandidates(orgId: string): Promise<KbSourceList
 async function resolveLinkedProjectIdFromPrompt(params: {
   orgId: string;
   prompt: string;
+  authToken: string;
 }): Promise<ResolvedProjectMatch | null> {
   const promptNormalized = normalizeSearchText(params.prompt);
   if (!promptNormalized) return null;
@@ -258,7 +262,7 @@ async function resolveLinkedProjectIdFromPrompt(params: {
   const promptTokens = buildSearchTokens(promptNormalized);
   if (!promptTokens.size) return null;
 
-  const candidates = await fetchProjectSourceCandidates(params.orgId);
+  const candidates = await fetchProjectSourceCandidates(params.orgId, params.authToken);
   if (!candidates.length) return null;
 
   const scored = candidates
@@ -289,6 +293,7 @@ async function resolveLinkedProjectIdFromPrompt(params: {
 async function fetchProjectFactsContext(params: {
   orgId: string;
   scopeId: string;
+  authToken: string;
 }): Promise<string> {
   const orgId = normalizeSlug(params.orgId || "");
   const scopeId = normalizeIdentifier(params.scopeId || "");
@@ -298,7 +303,7 @@ async function fetchProjectFactsContext(params: {
     `${getKbCoreUrl(`/kb/projects/${encodeURIComponent(scopeId)}/facts`)}?${new URLSearchParams({ orgId }).toString()}`,
     {
       method: "GET",
-      headers: buildKbCoreHeaders({ Accept: "application/json" }, token),
+      headers: buildKbCoreHeaders({ Accept: "application/json" }, params.authToken),
       cache: "no-store",
     },
   );
@@ -365,6 +370,7 @@ async function fetchOrchestratedRetrieve(params: {
   city?: string;
   neighborhood?: string;
   linkedProjectId?: string;
+  authToken: string;
 }): Promise<{
   context: string;
   qdrantSources: QdrantSource[];
@@ -402,7 +408,7 @@ async function fetchOrchestratedRetrieve(params: {
     headers: buildKbCoreHeaders({
       "Content-Type": "application/json",
       Accept: "application/json",
-    }, token),
+    }, params.authToken),
     body: JSON.stringify(body),
     cache: "no-store",
   });
@@ -610,7 +616,11 @@ export async function POST(request: NextRequest) {
 
         if (!effectiveLinkedProjectId && (source === "qdrant" || source === "both")) {
           send({ type: "status", message: "Identificando projeto automaticamente..." });
-          const resolvedProject = await resolveLinkedProjectIdFromPrompt({ orgId, prompt });
+          const resolvedProject = await resolveLinkedProjectIdFromPrompt({
+            orgId,
+            prompt,
+            authToken: token,
+          });
           if (resolvedProject?.scopeId) {
             effectiveLinkedProjectId = resolvedProject.scopeId;
             send({
@@ -632,6 +642,7 @@ export async function POST(request: NextRequest) {
             const factsContext = await fetchProjectFactsContext({
               orgId,
               scopeId: effectiveLinkedProjectId,
+              authToken: token,
             });
             if (factsContext) {
               combinedContext += `## Facts Estruturados de Projeto\n${factsContext}\n\n`;
@@ -648,6 +659,7 @@ export async function POST(request: NextRequest) {
           city: city || undefined,
           neighborhood: neighborhood || undefined,
           linkedProjectId: effectiveLinkedProjectId || undefined,
+          authToken: token,
         });
 
         qdrantSources = orchestrated.qdrantSources;
