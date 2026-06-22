@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import AdminLayout from "@/app/components/layout/AdminLayout";
 import StudioNav from "@/app/components/admin/StudioNav";
-import { auth } from "@/firebase/client";
 import { useToast } from "@/hooks/use-toast";
 import { withBasePath } from "@/lib/withBasePath";
+import { getReadyIdToken } from "../cmo-auth";
 
 type GeneratedContent = {
   id?: string;
@@ -149,20 +149,12 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
     ],
   );
 
-  const getToken = useCallback(async () => {
-    const token = await auth.currentUser?.getIdToken(true);
-    if (!token) {
-      throw new Error("Sessão necessária. Faça login novamente.");
-    }
-    return token;
-  }, []);
-
   const loadExistingContent = useCallback(async (): Promise<boolean> => {
     if (!briefId) return false;
 
     setLoadingExisting(true);
     try {
-      const token = await getToken();
+      const token = await getReadyIdToken();
       const response = await fetch(
         withBasePath(
           `/api/studio/cmo/content?briefId=${encodeURIComponent(briefId)}&orgId=${encodeURIComponent(orgId || "")}&limit=1`,
@@ -203,13 +195,13 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
     } finally {
       setLoadingExisting(false);
     }
-  }, [briefId, getToken, orgId]);
+  }, [briefId, orgId]);
 
   const loadBriefContext = useCallback(async (): Promise<void> => {
     if (!briefId) return;
 
     try {
-      const token = await getToken();
+      const token = await getReadyIdToken();
       const response = await fetch(
         withBasePath(`/api/studio/cmo/briefs/${encodeURIComponent(briefId)}?orgId=${encodeURIComponent(orgId || "")}`),
         {
@@ -225,7 +217,7 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
     } catch {
       // Keep the editor usable even if context loading fails.
     }
-  }, [briefId, getToken, orgId]);
+  }, [briefId, orgId]);
 
   const generateContent = useCallback(async () => {
     if (!briefId) {
@@ -239,7 +231,7 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
     setWarning(null);
 
     try {
-      const token = await getToken();
+      const token = await getReadyIdToken();
       const response = await fetch(
         withBasePath(`/api/studio/cmo/briefs/${encodeURIComponent(briefId)}/generate-content`),
         {
@@ -279,7 +271,7 @@ export default function DraftClient({ initialSearchParams }: DraftClientProps) {
       setGenerating(false);
       setStatus(null);
     }
-  }, [briefId, getToken, orgId, toast]);
+  }, [briefId, orgId, toast]);
 
   useEffect(() => {
     if (!briefId) return;

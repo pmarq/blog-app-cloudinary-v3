@@ -1,5 +1,5 @@
-import { auth } from "@/firebase/client";
 import { withBasePath } from "@/lib/withBasePath";
+import { getReadyIdToken } from "./cmo-auth";
 import type {
   BriefItem,
   CalendarItem,
@@ -19,16 +19,8 @@ export type CmoDraftBundle = {
 };
 
 export function createCmoClient(orgId: string) {
-  const getToken = async () => {
-    const token = await auth.currentUser?.getIdToken(true);
-    if (!token) {
-      throw new Error("Sessão necessária. Faça login novamente.");
-    }
-    return token;
-  };
-
   const apiFetch = async (path: string, init: RequestInit = {}) => {
-    const token = await getToken();
+    const token = await getReadyIdToken();
     return fetch(withBasePath(path), {
       ...init,
       headers: {

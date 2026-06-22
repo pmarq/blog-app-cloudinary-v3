@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminLayout from "@/app/components/layout/AdminLayout";
 import StudioNav from "@/app/components/admin/StudioNav";
-import { auth } from "@/firebase/client";
 import { useToast } from "@/hooks/use-toast";
 import { withBasePath } from "@/lib/withBasePath";
+import { getReadyIdToken } from "../../../cmo-auth";
 
 type BriefData = {
   id?: string;
@@ -153,14 +153,6 @@ export default function EditBriefClient({ briefId }: Props) {
     scheduledAt: "",
   });
 
-  const getToken = useCallback(async () => {
-    const token = await auth.currentUser?.getIdToken(true);
-    if (!token) {
-      throw new Error("Sessão necessária. Faça login novamente.");
-    }
-    return token;
-  }, []);
-
   useEffect(() => {
     if (!normalizedBriefId) {
       setError("briefId ausente.");
@@ -174,7 +166,7 @@ export default function EditBriefClient({ briefId }: Props) {
       setLoading(true);
       setError(null);
       try {
-        const token = await getToken();
+        const token = await getReadyIdToken();
         const response = await fetch(
           withBasePath(`/api/studio/cmo/briefs/${encodeURIComponent(normalizedBriefId)}`),
           {
@@ -232,7 +224,7 @@ export default function EditBriefClient({ briefId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [getToken, normalizedBriefId, toast]);
+  }, [normalizedBriefId, toast]);
 
   const summary = useMemo(
     () => [brief?.title, brief?.objective, brief?.angle].filter(Boolean).join(" • "),
@@ -245,7 +237,7 @@ export default function EditBriefClient({ briefId }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const token = await getToken();
+      const token = await getReadyIdToken();
       const response = await fetch(
         withBasePath(`/api/studio/cmo/briefs/${encodeURIComponent(normalizedBriefId)}`),
         {
@@ -297,7 +289,7 @@ export default function EditBriefClient({ briefId }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [brief?.orgId, form, getToken, normalizedBriefId, toast]);
+  }, [brief?.orgId, form, normalizedBriefId, toast]);
 
   const openDraft = useCallback(async () => {
     const saved = await saveBrief();
