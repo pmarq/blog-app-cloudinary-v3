@@ -18,6 +18,10 @@ export default function AuthButtons() {
   const router = useRouter();
   const auth = useAuth();
 
+  if (!auth?.authReady) {
+    return <div className="h-8 w-32" />;
+  }
+
   return (
     <div>
       {!!auth?.currentUser && (

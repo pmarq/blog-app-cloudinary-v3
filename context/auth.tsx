@@ -3,6 +3,7 @@
 import { auth } from "@/firebase/client";
 import {
   GoogleAuthProvider,
+  onIdTokenChanged,
   ParsedToken,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -13,6 +14,7 @@ import { removeToken, setToken } from "./action";
 
 type AuthContextType = {
   currentUser: User | null;
+  authReady: boolean;
   customClaims: ParsedToken | null;
   loginWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
@@ -24,33 +26,38 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [customClaims, setCustomClaims] = useState<ParsedToken | null>(null);
+  const [authReady, setAuthReady] = useState(false);
 
   // Listener para mudanças na autenticação
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      setCurrentUser(user ?? null);
-      if (user) {
-        try {
-          const tokenResult = await user.getIdTokenResult(true);
-          const token = tokenResult.token;
-          const refreshToken = user.refreshToken;
-          const claims = tokenResult.claims;
+    const unsubscribe = onIdTokenChanged(auth, async (user) => {
+      try {
+        setCurrentUser(user ?? null);
+        if (user) {
+          try {
+            const tokenResult = await user.getIdTokenResult(true);
+            const token = tokenResult.token;
+            const refreshToken = user.refreshToken;
+            const claims = tokenResult.claims;
 
-          setCustomClaims(claims ?? null);
+            setCustomClaims(claims ?? null);
 
-          if (token && refreshToken) {
-            await setToken({
-              token,
-              refreshToken,
-            });
+            if (token && refreshToken) {
+              await setToken({
+                token,
+                refreshToken,
+              });
+            }
+          } catch (error) {
+            console.error("Erro ao obter token do usuário:", error);
           }
-        } catch (error) {
-          console.error("Erro ao obter token do usuário:", error);
+        } else {
+          setCurrentUser(null);
+          setCustomClaims(null);
+          await removeToken();
         }
-      } else {
-        setCurrentUser(null);
-        setCustomClaims(null);
-        await removeToken();
+      } finally {
+        setAuthReady(true);
       }
     });
 
@@ -145,6 +152,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     <AuthContext.Provider
       value={{
         currentUser,
+        authReady,
         customClaims,
         loginWithGoogle,
         loginWithEmail,
