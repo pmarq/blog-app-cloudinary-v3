@@ -21,11 +21,23 @@ export function getKbCoreUrl(path: string): string {
 
 export function buildKbCoreHeaders(
   extra: Record<string, string> = {},
+  authToken = "",
 ): Record<string, string> {
   const headers: Record<string, string> = { ...extra };
+  const bearer = String(authToken || "").trim();
+  if (bearer) {
+    headers.Authorization = `Bearer ${bearer}`;
+    return headers;
+  }
   const apiKey = String(process.env.KB_CORE_API_KEY || "").trim();
   if (apiKey) {
     headers["x-api-key"] = apiKey;
   }
   return headers;
+}
+
+export function getBearerToken(request: { headers?: { get(name: string): string | null } }): string {
+  const header = request.headers?.get("authorization") || "";
+  if (!header.startsWith("Bearer ")) return "";
+  return header.slice("Bearer ".length).trim();
 }

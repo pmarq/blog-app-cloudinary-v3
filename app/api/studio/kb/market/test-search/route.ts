@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       headers: buildKbCoreHeaders({
         "Content-Type": "application/json",
         Accept: "application/json",
-      }),
+      }, token),
       body: JSON.stringify({
         query,
         limit,

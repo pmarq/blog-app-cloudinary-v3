@@ -8,6 +8,7 @@ import {
   normalizeContext,
 } from "../../utils";
 import { StudioContext } from "@/app/models/Studio";
+import { requireAdmin } from "@/lib/adminAuth";
 
 interface VisualRequestBody {
   context?: Partial<StudioContext>;
@@ -17,6 +18,9 @@ interface VisualRequestBody {
 }
 
 export async function POST(request: NextRequest) {
+  const unauthorized = await requireAdmin(request);
+  if (unauthorized) return unauthorized;
+
   const body = await readJson<VisualRequestBody>(request);
   if (!body) return badRequest("Invalid JSON body.");
 

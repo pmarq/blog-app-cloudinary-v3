@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
       `${getKbCoreUrl("/kb/sources")}?${params.toString()}`,
       {
         method: "GET",
-        headers: buildKbCoreHeaders({ Accept: "application/json" }),
+        headers: buildKbCoreHeaders({ Accept: "application/json" }, token),
         cache: "no-store",
       },
     );

@@ -8,6 +8,7 @@ import {
   normalizeContext,
 } from "../../utils";
 import { StudioContext } from "@/app/models/Studio";
+import { requireAdmin } from "@/lib/adminAuth";
 
 interface GuardrailRequestBody {
   context?: Partial<StudioContext>;
@@ -18,6 +19,9 @@ interface GuardrailRequestBody {
 }
 
 export async function POST(request: NextRequest) {
+  const unauthorized = await requireAdmin(request);
+  if (unauthorized) return unauthorized;
+
   const body = await readJson<GuardrailRequestBody>(request);
   if (!body) return badRequest("Invalid JSON body.");
 

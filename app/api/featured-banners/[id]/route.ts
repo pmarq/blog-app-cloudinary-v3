@@ -7,6 +7,7 @@ import {
   updateFeaturedBanner,
 } from "@/app/(admin)/dashboard/featured-banners/action";
 import { v2 as cloudinary } from "cloudinary";
+import { requireAdmin } from "@/lib/adminAuth";
 
 export async function GET(
   request: Request,
@@ -38,6 +39,9 @@ export async function PUT(
   const { id } = await context.params;
 
   try {
+    const unauthorized = await requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     const data = await request.json();
     const { title, link, linkTitle, imageUrl, publicId, oldPublicId } = data;
 
@@ -92,6 +96,9 @@ export async function DELETE(
   const { id } = await context.params;
 
   try {
+    const unauthorized = await requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     const response = await deleteFeaturedBanner(id);
 
     if (response.error) {

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { ok, badRequest, readJson, makeRunId } from "../../utils";
+import { requireAdmin } from "@/lib/adminAuth";
 
 interface CuratePdfRequestBody {
   url?: string;
@@ -8,6 +9,9 @@ interface CuratePdfRequestBody {
 }
 
 export async function POST(request: NextRequest) {
+  const unauthorized = await requireAdmin(request);
+  if (unauthorized) return unauthorized;
+
   // Suporta JSON (url/fileId) ou multipart/form-data com file
   const contentType = request.headers.get("content-type") || "";
   if (contentType.includes("multipart/form-data")) {

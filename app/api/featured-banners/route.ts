@@ -6,6 +6,7 @@ import {
   createFeaturedBanner,
   getFeaturedBanners,
 } from "@/app/(admin)/dashboard/featured-banners/action";
+import { requireAdmin } from "@/lib/adminAuth";
 
 export async function GET() {
   try {
@@ -21,6 +22,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const unauthorized = await requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     const data = await request.json();
 
     const { title, link, linkTitle, imageUrl, publicId } = data;

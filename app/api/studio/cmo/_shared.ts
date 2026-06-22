@@ -35,11 +35,12 @@ export function getCoreBaseUrl(): string {
 }
 
 export function getCoreHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const authHeader = (extra.authorization || extra.Authorization || "").trim();
+  if (authHeader) {
+    return { ...extra, Authorization: authHeader, authorization: authHeader };
+  }
   const apiKey = String(process.env.KB_CORE_API_KEY || "").trim();
-  return {
-    ...extra,
-    ...(apiKey ? { "x-api-key": apiKey } : {}),
-  };
+  return { ...extra, ...(apiKey ? { "x-api-key": apiKey } : {}) };
 }
 
 function normalizeText(value: unknown): string {
@@ -116,11 +117,13 @@ export function withLatestItemsPayload(payload: unknown): unknown {
 
 export async function forwardJson(request: NextRequest, path: string, init?: RequestInit) {
   const method = String(init?.method || request.method || "GET").toUpperCase();
+  const bearer = getBearerToken(request);
   const response = await fetch(`${getCoreBaseUrl()}${path}`, {
     cache: "no-store",
     ...init,
     headers: getCoreHeaders({
       ...(init?.headers && typeof init.headers === "object" ? (init.headers as Record<string, string>) : {}),
+      ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
     }),
   });
 

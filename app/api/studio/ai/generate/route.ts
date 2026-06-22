@@ -238,7 +238,7 @@ async function fetchProjectSourceCandidates(orgId: string): Promise<KbSourceList
 
   const response = await fetch(`${getKbCoreUrl("/kb/sources")}?${query.toString()}`, {
     method: "GET",
-    headers: buildKbCoreHeaders({ Accept: "application/json" }),
+    headers: buildKbCoreHeaders({ Accept: "application/json" }, token),
     cache: "no-store",
   });
 
@@ -298,7 +298,7 @@ async function fetchProjectFactsContext(params: {
     `${getKbCoreUrl(`/kb/projects/${encodeURIComponent(scopeId)}/facts`)}?${new URLSearchParams({ orgId }).toString()}`,
     {
       method: "GET",
-      headers: buildKbCoreHeaders({ Accept: "application/json" }),
+      headers: buildKbCoreHeaders({ Accept: "application/json" }, token),
       cache: "no-store",
     },
   );
@@ -402,7 +402,7 @@ async function fetchOrchestratedRetrieve(params: {
     headers: buildKbCoreHeaders({
       "Content-Type": "application/json",
       Accept: "application/json",
-    }),
+    }, token),
     body: JSON.stringify(body),
     cache: "no-store",
   });
@@ -749,4 +749,5 @@ export async function POST(request: NextRequest) {
     },
   });
 }
+
 

@@ -2,10 +2,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
-import { firestore, auth } from "@/firebase/server";
+import { firestore } from "@/firebase/server";
 import { isThumbnail, Post } from "@/app/models/Post";
 import { validateSchema, postValidationSchema } from "@/lib/validationSchema";
 import { deleteFromCloudinary } from "@/lib/cloudinary.server";
+import { requireAdmin } from "@/lib/adminAuth";
 
 function duplicateSlugQuery(slug: string, cat: string, excludeId: string) {
   return firestore
@@ -55,6 +56,9 @@ export async function PUT(
   const { id: postId } = await context.params;
 
   try {
+    const unauthorized = await requireAdmin(req);
+    if (unauthorized) return unauthorized;
+
     const body = await req.json();
     const {
       title,
@@ -62,7 +66,6 @@ export async function PUT(
       meta,
       slug: newSlug,
       thumbnail,
-      authorId,
       categorySlug: newCatSlug,
       categoryTitle,
       categoryId,
@@ -77,16 +80,6 @@ export async function PUT(
       );
     }
     const existing = snap.data() as Post;
-
-    const existingAuthorId = (
-      existing.author as FirebaseFirestore.DocumentReference
-    ).id;
-    if (existingAuthorId !== authorId) {
-      return NextResponse.json(
-        { error: true, message: "Sem permissão para editar." },
-        { status: 403 }
-      );
-    }
 
     const rawTags = body.tagsArray ?? body.tags;
     const parsedTags: string[] = Array.isArray(rawTags)
@@ -161,16 +154,8 @@ export async function DELETE(
   const { id: postId } = await context.params;
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const token = authHeader.split("Bearer ")[1];
-    const decoded = await auth.verifyIdToken(token);
-    if (!decoded) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const unauthorized = await requireAdmin(req);
+    if (unauthorized) return unauthorized;
 
     const docRef = firestore.doc(`posts/${postId}`);
     const docSnap = await docRef.get();
@@ -179,11 +164,6 @@ export async function DELETE(
     }
 
     const post = docSnap.data() as Post;
-    if (
-      (post.author as FirebaseFirestore.DocumentReference).id !== decoded.uid
-    ) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
 
     if (post.thumbnail?.public_id) {
       await deleteFromCloudinary(post.thumbnail.public_id);

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { Job } from "@/app/models/Studio";
 import { ok, badRequest, readJson, makeRunId } from "../../utils";
+import { requireAdmin } from "@/lib/adminAuth";
 
 interface PublishBlogRequestBody {
   postId?: string;
@@ -9,6 +10,9 @@ interface PublishBlogRequestBody {
 }
 
 export async function POST(request: NextRequest) {
+  const unauthorized = await requireAdmin(request);
+  if (unauthorized) return unauthorized;
+
   const body = await readJson<PublishBlogRequestBody>(request);
   if (!body) return badRequest("Invalid JSON body.");
 

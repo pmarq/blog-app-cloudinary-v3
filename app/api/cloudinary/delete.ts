@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { deleteFromCloudinary } from "@/lib/cloudinary.server"; // Importação do módulo server-side
+import { requireAdmin } from "@/lib/adminAuth";
 
 /**
  * Interface para a requisição de deleção
@@ -15,6 +16,9 @@ interface DeleteRequestBody {
  */
 export async function POST(request: NextRequest) {
   try {
+    const unauthorized = await requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     const body: DeleteRequestBody = await request.json();
 
     const { public_id } = body;

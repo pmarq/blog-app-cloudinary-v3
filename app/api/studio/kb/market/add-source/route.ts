@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       headers: buildKbCoreHeaders({
         "Content-Type": "application/json",
         Accept: "application/json",
-      }),
+      }, authToken),
       body: JSON.stringify({
         sourceId,
         orgId,

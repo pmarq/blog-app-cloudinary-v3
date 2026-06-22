@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { Action } from "@/app/models/Studio";
 import { mockActionResult, ok, badRequest, readJson, normalizeContext } from "../../utils";
 import { StudioContext } from "@/app/models/Studio";
+import { requireAdmin } from "@/lib/adminAuth";
 
 interface IdeaRequestBody {
   context?: Partial<StudioContext>;
@@ -13,6 +14,9 @@ interface IdeaRequestBody {
 }
 
 export async function POST(request: NextRequest) {
+  const unauthorized = await requireAdmin(request);
+  if (unauthorized) return unauthorized;
+
   const body = await readJson<IdeaRequestBody>(request);
   if (!body) return badRequest("Invalid JSON body.");
 

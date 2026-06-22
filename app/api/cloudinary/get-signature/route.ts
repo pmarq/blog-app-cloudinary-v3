@@ -1,6 +1,7 @@
 // app/api/cloudinary/get-signature/route.ts
 import { NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
+import { requireAdmin } from "@/lib/adminAuth";
 
 // Configuração do Cloudinary
 cloudinary.config({
@@ -18,6 +19,9 @@ cloudinary.config({
  * - folder: A pasta no Cloudinary onde a imagem será armazenada.
  */
 export async function GET(request: Request) {
+  const unauthorized = await requireAdmin(request);
+  if (unauthorized) return unauthorized;
+
   const { searchParams } = new URL(request.url);
   const folder = searchParams.get("folder") || "";
 
